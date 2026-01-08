@@ -1,15 +1,12 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 // Map style URLs - using OpenFreeMap (free, no API key)
 const MAP_STYLES = {
   light: 'https://tiles.openfreemap.org/styles/positron',
-  dark: 'https://tiles.openfreemap.org/styles/liberty', // Liberty has better contrast for routes
+  dark: 'https://tiles.openfreemap.org/styles/liberty',
 }
-
-// Route colors matching the original
-const ROUTE_COLORS = ['#3b82f6', '#10b981', '#f59e0b']
 
 function MapLibreMap({
   center = [10, 50], // [lng, lat] - MapLibre uses lng,lat order
@@ -28,39 +25,60 @@ function MapLibreMap({
   const markersRef = useRef([])
   const hoveredMarkerRef = useRef(null)
   const [mapLoaded, setMapLoaded] = useState(false)
+  const [styleLoaded, setStyleLoaded] = useState(false)
+  const currentDarkModeRef = useRef(darkMode)
 
   // Initialize map
   useEffect(() => {
     if (map.current) return // Already initialized
 
-    map.current = new maplibregl.Map({
-      container: mapContainer.current,
-      style: darkMode ? MAP_STYLES.dark : MAP_STYLES.light,
-      center: marker ? [marker[1], marker[0]] : center, // [lng, lat]
-      zoom: zoom,
-      attributionControl: true,
-    })
+    try {
+      map.current = new maplibregl.Map({
+        container: mapContainer.current,
+        style: darkMode ? MAP_STYLES.dark : MAP_STYLES.light,
+        center: marker ? [marker[1], marker[0]] : center, // [lng, lat]
+        zoom: zoom,
+        attributionControl: true,
+      })
 
-    map.current.addControl(new maplibregl.NavigationControl(), 'top-left')
+      map.current.addControl(new maplibregl.NavigationControl(), 'top-left')
 
-    map.current.on('load', () => {
-      setMapLoaded(true)
-    })
+      map.current.on('load', () => {
+        setMapLoaded(true)
+        setStyleLoaded(true)
+      })
 
-    // Handle map clicks
-    map.current.on('click', (e) => {
-      onClick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-    })
+      map.current.on('error', (e) => {
+        console.error('MapLibre error:', e)
+      })
+
+      // Handle map clicks
+      map.current.on('click', (e) => {
+        onClick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+      })
+    } catch (err) {
+      console.error('Failed to initialize map:', err)
+    }
 
     return () => {
-      map.current?.remove()
-      map.current = null
+      if (map.current) {
+        map.current.remove()
+        map.current = null
+      }
     }
   }, [])
 
   // Update map style when dark mode changes
   useEffect(() => {
     if (!map.current || !mapLoaded) return
+    // Skip if this is the initial render (darkMode hasn't changed)
+    if (currentDarkModeRef.current === darkMode) return
+    currentDarkModeRef.current = darkMode
+
+    setStyleLoaded(false)
+    map.current.once('style.load', () => {
+      setStyleLoaded(true)
+    })
     map.current.setStyle(darkMode ? MAP_STYLES.dark : MAP_STYLES.light)
   }, [darkMode, mapLoaded])
 
@@ -107,27 +125,33 @@ function MapLibreMap({
 
   // Add/update route layers and markers
   useEffect(() => {
-    if (!map.current || !mapLoaded) return
+    if (!map.current || !mapLoaded || !styleLoaded) return
 
-    // Remove existing route sources and layers
-    routes.forEach((_, i) => {
+    // Remove existing route sources and layers (try-catch because style change removes them)
+    for (let i = 0; i < 20; i++) {
       const sourceId = `route-${i}`
-      if (map.current.getLayer(`${sourceId}-line`)) {
-        map.current.removeLayer(`${sourceId}-line`)
+      try {
+        if (map.current.getLayer(`${sourceId}-line`)) {
+          map.current.removeLayer(`${sourceId}-line`)
+        }
+        if (map.current.getLayer(`${sourceId}-line-glow`)) {
+          map.current.removeLayer(`${sourceId}-line-glow`)
+        }
+        if (map.current.getSource(sourceId)) {
+          map.current.removeSource(sourceId)
+        }
+      } catch (e) {
+        // Ignore - layer/source may not exist after style change
       }
-      if (map.current.getLayer(`${sourceId}-line-glow`)) {
-        map.current.removeLayer(`${sourceId}-line-glow`)
-      }
-      if (map.current.getSource(sourceId)) {
-        map.current.removeSource(sourceId)
-      }
-    })
+    }
 
     // Remove existing stop markers
     markersRef.current
       .filter(m => m._type === 'stop')
       .forEach(m => m.remove())
     markersRef.current = markersRef.current.filter(m => m._type !== 'stop')
+
+    if (routes.length === 0) return
 
     // Add new routes
     routes.forEach((item, index) => {
@@ -137,20 +161,39 @@ function MapLibreMap({
       const isSelected = selectedRouteIndex === index
       const isVisible = selectedRouteIndex === null || isSelected
 
-      // Add route source
-      map.current.addSource(sourceId, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: item.route.geometry,
-        },
-      })
+      try {
+        // Add route source
+        map.current.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: item.route.geometry,
+          },
+        })
 
-      // Add glow layer for selected route
-      if (isSelected) {
+        // Add glow layer for selected route
+        if (isSelected) {
+          map.current.addLayer({
+            id: `${sourceId}-line-glow`,
+            type: 'line',
+            source: sourceId,
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round',
+            },
+            paint: {
+              'line-color': item.color,
+              'line-width': 12,
+              'line-opacity': 0.3,
+              'line-blur': 4,
+            },
+          })
+        }
+
+        // Add main route line
         map.current.addLayer({
-          id: `${sourceId}-line-glow`,
+          id: `${sourceId}-line`,
           type: 'line',
           source: sourceId,
           layout: {
@@ -159,41 +202,26 @@ function MapLibreMap({
           },
           paint: {
             'line-color': item.color,
-            'line-width': 12,
-            'line-opacity': 0.3,
-            'line-blur': 4,
+            'line-width': isSelected ? 5 : 4,
+            'line-opacity': isVisible ? (isSelected ? 1 : 0.8) : 0.3,
           },
         })
+
+        // Add click handler for route
+        map.current.on('click', `${sourceId}-line`, () => {
+          onRouteClick?.(index)
+        })
+
+        // Change cursor on hover
+        map.current.on('mouseenter', `${sourceId}-line`, () => {
+          map.current.getCanvas().style.cursor = 'pointer'
+        })
+        map.current.on('mouseleave', `${sourceId}-line`, () => {
+          map.current.getCanvas().style.cursor = ''
+        })
+      } catch (err) {
+        console.error('Failed to add route layer:', err)
       }
-
-      // Add main route line
-      map.current.addLayer({
-        id: `${sourceId}-line`,
-        type: 'line',
-        source: sourceId,
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
-        },
-        paint: {
-          'line-color': item.color,
-          'line-width': isSelected ? 5 : 4,
-          'line-opacity': isVisible ? (isSelected ? 1 : 0.8) : 0.3,
-        },
-      })
-
-      // Add click handler for route
-      map.current.on('click', `${sourceId}-line`, () => {
-        onRouteClick?.(index)
-      })
-
-      // Change cursor on hover
-      map.current.on('mouseenter', `${sourceId}-line`, () => {
-        map.current.getCanvas().style.cursor = 'pointer'
-      })
-      map.current.on('mouseleave', `${sourceId}-line`, () => {
-        map.current.getCanvas().style.cursor = ''
-      })
 
       // Add stop marker
       const stopEl = document.createElement('div')
@@ -250,7 +278,7 @@ function MapLibreMap({
         duration: 500,
       })
     }
-  }, [routes, selectedRouteIndex, mapLoaded, marker, onRouteClick])
+  }, [routes, selectedRouteIndex, mapLoaded, styleLoaded, marker, onRouteClick])
 
   // Handle hovered point from elevation profile
   useEffect(() => {
@@ -308,7 +336,7 @@ function MapLibreMap({
     <div
       ref={mapContainer}
       className={className}
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', width: '100%', height: '100%', minHeight: '200px' }}
     />
   )
 }

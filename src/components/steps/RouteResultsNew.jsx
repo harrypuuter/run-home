@@ -582,13 +582,28 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   const hasMoreRoutes = transitStops.some(s => !searchedStopsRef.current.has(s.id))
   const selectedItem = selectedRouteIndex !== null ? calculatedRoutes[selectedRouteIndex] : null
 
-  // Loading state
-  if (isLoading) {
+  // Loading state - show when loading or when still calculating initial routes
+  if (isLoading || (calculatingRoutes && calculatedRoutes.length === 0)) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-slate-900">
         <div className="text-center space-y-4">
           <Loader2 className="w-10 h-10 text-blue-400 animate-spin mx-auto" />
           <p className="text-slate-300">{searchPhase || 'Finding routes...'}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Guard against missing homeLocation
+  if (!homeLocation || typeof homeLocation.lat !== 'number' || typeof homeLocation.lng !== 'number') {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-slate-900">
+        <div className="text-center space-y-4">
+          <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
+          <p className="text-slate-300">Home location not set</p>
+          <Button variant="secondary" onClick={onReset}>
+            Start Over
+          </Button>
         </div>
       </div>
     )
