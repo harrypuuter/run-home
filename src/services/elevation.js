@@ -12,6 +12,7 @@ const OPEN_METEO_ELEVATION_URL = 'https://api.open-meteo.com/v1/elevation'
  */
 export async function fetchElevationProfile(coordinates) {
   if (!coordinates || coordinates.length === 0) {
+    console.warn('[Elevation] No coordinates provided')
     return []
   }
 
@@ -20,12 +21,18 @@ export async function fetchElevationProfile(coordinates) {
   const step = Math.max(1, Math.floor(coordinates.length / maxPoints))
   const sampledCoords = coordinates.filter((_, i) => i % step === 0)
 
+  console.log('[Elevation] Fetching elevation for', sampledCoords.length, 'points')
+
   try {
     const profile = await fetchOpenMeteoElevation(sampledCoords)
 
     if (!profile || profile.length === 0) {
+      console.warn('[Elevation] Empty profile, using fallback')
       return generateFallbackProfile(sampledCoords)
     }
+
+    const validCount = profile.filter(p => p.elevation !== null).length
+    console.log('[Elevation] Got', profile.length, 'points,', validCount, 'with valid elevation')
 
     return profile
   } catch (err) {
