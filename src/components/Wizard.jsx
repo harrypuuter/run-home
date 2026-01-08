@@ -80,6 +80,11 @@ function Wizard({ state, updateState, goToStep, nextStep, prevStep, resetWizard,
     }
   }
 
+  // RouteResults renders full-page, bypass the card wrapper
+  if (currentStep === 6) {
+    return renderStep()
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 md:p-8">
       <div className="w-full max-w-md md:max-w-2xl lg:max-w-4xl">

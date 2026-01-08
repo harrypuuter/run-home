@@ -1,11 +1,23 @@
 # Run-Home App - TODO List
 
-> **Last Updated:** January 8, 2026
+> **Last Updated:** January 9, 2026
 > **Priority:** 🔴 High | 🟡 Medium | 🟢 Low
 
 ---
 
 ## ✅ Completed
+
+### MapLibre Migration (Phase 1-3)
+
+- [x] **MapLibreMap component** - Full-page vector map with OpenFreeMap tiles
+- [x] **RouteResults redesign** - Floating route cards with slide-out detail panel
+- [x] **ElevationProfile redesign** - Canvas-based rendering with built-in stats
+- [x] **Removed Leaflet dependency** - MapLibreMap now handles all route display
+- [x] **OSM transit fallback** - Overpass API fallback when Deutsche Bahn API is down
+- [x] **Open-Meteo elevation** - CORS-friendly elevation API (max 50 points per request)
+- [x] **File cleanup** - Removed old *New.jsx files, renamed to default names
+- [x] **Dark mode toggle removed** - Simplified UI
+- [x] **Panel width 35%** - Improved layout
 
 ### Bugs Fixed
 
@@ -14,6 +26,7 @@
 - [x] **Fix excessive re-renders** - Added useCallback, useMemo, memo, fixed useEffect dependencies
 - [x] **Fix routes disappearing** - Fixed useEffect race condition with isCalculatingRef
 - [x] **Fix elevation API reliability** - Switched from Open-Elevation (unreliable) to Open-Meteo (stable)
+- [x] **Fix distance tolerance** - Increased to 30% for more route matches
 
 ### Features Implemented
 
@@ -26,19 +39,30 @@
 
 ---
 
-## 🔴 High Priority - Next Up
+## 🔴 High Priority - Next Session
 
-### 1. MapLibre Migration + Full-Page Map Layout
-**Status:** Planned
-**Spec:** See [FEATURE_MAPLIBRE_REDESIGN.md](./FEATURE_MAPLIBRE_REDESIGN.md)
+### 1. Fix WebGL Context Loss
+**Status:** In Progress
+**Issue:** MapLibre repeatedly losing WebGL context during HMR and route calculation
 
-**Summary:**
-- Switch from React-Leaflet to MapLibre GL JS
-- Full-page map with floating route cards
-- Slide-out detail panel with elevation profile
-- 3D buildings and hillshade terrain
-- Directional route animation
-- Dark/light mode toggle
+**Symptoms:**
+- `WebGL context was lost` errors in console
+- `mapLoaded: false styleLoaded: false` prevents route display
+- Routes calculate correctly but don't appear on map
+
+**Attempted fixes:**
+- [x] Added `preserveDrawingBuffer: true` to map options
+- [x] Added WebGL context loss/restore event handlers
+- [x] Added context validity check before route rendering
+- [ ] May need to debounce route updates or delay map initialization
+
+### 2. Verify Elevation Profile Display
+**Status:** Needs Testing
+**Issue:** Canvas may not be drawing due to dimension issues
+
+**Debug logs to check:**
+- `[ElevationProfile] Draw effect - canvas:` should show valid dimensions
+- Check if elevation data is being fetched successfully
 
 ---
 
