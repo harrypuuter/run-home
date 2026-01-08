@@ -4,7 +4,7 @@ import DistanceSelect from './steps/DistanceSelect'
 import ActivitySelect from './steps/ActivitySelect'
 import DepartureTime from './steps/DepartureTime'
 import DirectionSelect from './steps/DirectionSelect'
-import RouteResults from './steps/RouteResults'
+import RouteResults from './steps/RouteResultsNew'
 
 const TOTAL_STEPS = 6
 
@@ -78,6 +78,11 @@ function Wizard({ state, updateState, goToStep, nextStep, prevStep, resetWizard,
       default:
         return null
     }
+  }
+
+  // RouteResults renders full-page, bypass the card wrapper
+  if (currentStep === 6) {
+    return renderStep()
   }
 
   return (
