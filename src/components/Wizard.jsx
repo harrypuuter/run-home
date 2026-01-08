@@ -4,7 +4,7 @@ import DistanceSelect from './steps/DistanceSelect'
 import ActivitySelect from './steps/ActivitySelect'
 import DepartureTime from './steps/DepartureTime'
 import DirectionSelect from './steps/DirectionSelect'
-import RouteResults from './steps/RouteResultsNew'
+import RouteResults from './steps/RouteResults'
 
 const TOTAL_STEPS = 6
 

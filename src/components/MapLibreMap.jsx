@@ -39,17 +39,36 @@ function MapLibreMap({
         center: marker ? [marker[1], marker[0]] : center, // [lng, lat]
         zoom: zoom,
         attributionControl: true,
+        preserveDrawingBuffer: true, // Helps with WebGL context
+        failIfMajorPerformanceCaveat: false,
       })
 
       map.current.addControl(new maplibregl.NavigationControl(), 'top-left')
 
       map.current.on('load', () => {
+        console.log('[MapLibreMap] Map loaded successfully')
         setMapLoaded(true)
         setStyleLoaded(true)
       })
 
       map.current.on('error', (e) => {
         console.error('MapLibre error:', e)
+      })
+
+      // Handle WebGL context loss/restore
+      const canvas = map.current.getCanvas()
+      canvas.addEventListener('webglcontextlost', (e) => {
+        console.warn('[MapLibreMap] WebGL context lost, preventing default')
+        e.preventDefault()
+      })
+      canvas.addEventListener('webglcontextrestored', () => {
+        console.log('[MapLibreMap] WebGL context restored')
+        // Trigger re-render of map content
+        setMapLoaded(false)
+        setTimeout(() => {
+          setMapLoaded(true)
+          setStyleLoaded(true)
+        }, 100)
       })
 
       // Handle map clicks
@@ -64,6 +83,8 @@ function MapLibreMap({
       if (map.current) {
         map.current.remove()
         map.current = null
+        setMapLoaded(false)
+        setStyleLoaded(false)
       }
     }
   }, [])
@@ -121,11 +142,29 @@ function MapLibreMap({
 
     homeMarker._type = 'home'
     markersRef.current.push(homeMarker)
-  }, [marker, mapLoaded])
+  }, [marker, mapLoaded, styleLoaded])
 
   // Add/update route layers and markers
   useEffect(() => {
-    if (!map.current || !mapLoaded || !styleLoaded) return
+    if (!map.current || !mapLoaded || !styleLoaded) {
+      console.log('[MapLibreMap] Routes effect skipped - mapLoaded:', mapLoaded, 'styleLoaded:', styleLoaded)
+      return
+    }
+
+    // Check if WebGL context is valid
+    try {
+      const canvas = map.current.getCanvas()
+      const gl = canvas.getContext('webgl') || canvas.getContext('webgl2')
+      if (!gl || gl.isContextLost()) {
+        console.log('[MapLibreMap] Routes effect skipped - WebGL context lost')
+        return
+      }
+    } catch (e) {
+      console.log('[MapLibreMap] Routes effect skipped - canvas check failed')
+      return
+    }
+
+    console.log('[MapLibreMap] Routes effect running - adding', routes.length, 'routes')
 
     // Remove existing route sources and layers (try-catch because style change removes them)
     for (let i = 0; i < 20; i++) {
@@ -273,7 +312,7 @@ function MapLibreMap({
       })
 
       map.current.fitBounds(bounds, {
-        padding: { top: 50, bottom: 50, left: 50, right: 350 }, // Extra right padding for cards
+        padding: { top: 60, bottom: 60, left: 60, right: Math.max(400, window.innerWidth * 0.38) }, // 35% + margin for side panel
         maxZoom: 14,
         duration: 500,
       })

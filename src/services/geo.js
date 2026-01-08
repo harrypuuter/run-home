@@ -129,8 +129,8 @@ export function formatDuration(seconds) {
  */
 export function getDistanceTolerance(targetKm) {
   const targetMeters = targetKm * 1000
-  const percentTolerance = targetMeters * 0.15 // 15%
-  const minTolerance = 2000 // 2 km minimum
+  const percentTolerance = targetMeters * 0.30 // 30% - generous to find more routes
+  const minTolerance = 2500 // 2.5 km minimum
 
   const tolerance = Math.max(percentTolerance, minTolerance)
 

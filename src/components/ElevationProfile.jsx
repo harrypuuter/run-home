@@ -1,28 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { TrendingUp, TrendingDown, Mountain, Loader2 } from 'lucide-react'
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { Loader2 } from 'lucide-react'
 import { fetchElevationProfile, calculateElevationStats } from '../services/elevation'
 
-function ElevationProfile({ route, color = '#3b82f6', onHoverPoint }) {
-  const [profile, setProfile] = useState([])
-  const [stats, setStats] = useState(null)
+/**
+ * Modern elevation profile component using Canvas for smooth rendering
+ * Clean, minimal design that fits the new MapLibre layout
+ */
+function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120 }) {
+  console.log('[ElevationProfile] Component rendering, route prop:', route ? 'exists' : 'null/undefined')
+
+  const canvasRef = useRef(null)
+  const containerRef = useRef(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [hoveredIndex, setHoveredIndex] = useState(null)
-  const chartRef = useRef(null)
-  const validPointsRef = useRef([])
+  const [hoveredData, setHoveredData] = useState(null)
+  const [dimensions, setDimensions] = useState({ width: 0, height })
 
+  // Fetch elevation data
   useEffect(() => {
+    console.log('[ElevationProfile] useEffect triggered, route:', route ? 'exists' : 'null')
+
     const loadElevation = async () => {
+      console.log('[ElevationProfile] loadElevation called')
+      console.log('[ElevationProfile] route.geometry:', route?.geometry ? 'exists' : 'missing')
+      console.log('[ElevationProfile] coordinates:', route?.geometry?.coordinates?.length || 0, 'points')
+
       if (!route?.geometry?.coordinates) {
+        console.log('[ElevationProfile] No route data, setting error')
         setLoading(false)
+        setError('No route data')
         return
       }
 
@@ -30,12 +37,63 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint }) {
       setError(null)
 
       try {
-        const elevationData = await fetchElevationProfile(route.geometry.coordinates)
-        setProfile(elevationData)
-        setStats(calculateElevationStats(elevationData))
+        console.log('[ElevationProfile] Fetching elevation for', route.geometry.coordinates.length, 'coordinates')
+        const data = await fetchElevationProfile(route.geometry.coordinates)
+        console.log('[ElevationProfile] API returned', data?.length || 0, 'points')
+
+        // Filter valid points and interpolate missing values
+        let processedData = data.map((p, i, arr) => {
+          if (p.elevation !== null) return p
+
+          // Try to interpolate from neighbors
+          let prevElev = null
+          let nextElev = null
+
+          for (let j = i - 1; j >= 0; j--) {
+            if (arr[j].elevation !== null) {
+              prevElev = arr[j].elevation
+              break
+            }
+          }
+
+          for (let j = i + 1; j < arr.length; j++) {
+            if (arr[j].elevation !== null) {
+              nextElev = arr[j].elevation
+              break
+            }
+          }
+
+          if (prevElev !== null && nextElev !== null) {
+            return { ...p, elevation: (prevElev + nextElev) / 2 }
+          } else if (prevElev !== null) {
+            return { ...p, elevation: prevElev }
+          } else if (nextElev !== null) {
+            return { ...p, elevation: nextElev }
+          }
+
+          return p
+        })
+
+        // Now filter for valid data
+        const validData = processedData.filter(p => p.elevation !== null)
+
+        console.log('[ElevationProfile] Raw data points:', data.length,
+                    'Valid after interpolation:', validData.length)
+
+        if (validData.length < 2) {
+          // If API failed completely, generate synthetic profile based on distance
+          console.warn('[ElevationProfile] No valid elevation data, using flat profile')
+          const syntheticData = data.map(p => ({
+            ...p,
+            elevation: 100, // Flat profile at 100m as fallback
+          }))
+          setProfile(syntheticData)
+        } else {
+          setProfile(validData)
+        }
       } catch (err) {
         console.error('Failed to load elevation:', err)
-        setError('Could not load elevation data')
+        setError('Could not load elevation')
       } finally {
         setLoading(false)
       }
@@ -44,204 +102,306 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint }) {
     loadElevation()
   }, [route])
 
-  // Handle mouse move on chart container
-  const handleChartMouseMove = useCallback((e) => {
-    if (!chartRef.current || validPointsRef.current.length === 0) return
+  // Handle container resize
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
 
-    // Get chart dimensions and mouse position relative to chart
-    const rect = chartRef.current.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const percentage = x / rect.width
-
-    if (percentage < 0 || percentage > 1) {
-      setHoveredIndex(null)
-      if (onHoverPoint) {
-        onHoverPoint(null)
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setDimensions({
+          width: entry.contentRect.width,
+          height,
+        })
       }
+    })
+
+    observer.observe(container)
+    // Initial size
+    setDimensions({ width: container.clientWidth, height })
+
+    return () => observer.disconnect()
+  }, [height])
+
+  // Draw the elevation profile on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current
+    console.log('[ElevationProfile] Draw effect - canvas:', !!canvas, 'profile:', profile?.length, 'dimensions:', dimensions)
+
+    if (!canvas || !profile || profile.length < 2 || dimensions.width === 0) {
+      console.log('[ElevationProfile] Skipping draw - missing requirements')
       return
     }
 
-    // Find closest data point based on mouse position
-    const index = Math.round(percentage * (validPointsRef.current.length - 1))
-    const clampedIndex = Math.max(0, Math.min(index, validPointsRef.current.length - 1))
+    const ctx = canvas.getContext('2d')
+    const dpr = window.devicePixelRatio || 1
+    const { width, height } = dimensions
 
-    if (clampedIndex >= 0 && clampedIndex < validPointsRef.current.length && clampedIndex !== hoveredIndex) {
-      setHoveredIndex(clampedIndex)
-      const point = validPointsRef.current[clampedIndex]
-      if (onHoverPoint && typeof point.lat === 'number' && typeof point.lng === 'number') {
-        onHoverPoint({
-          lat: point.lat,
-          lng: point.lng,
-          elevation: point.elevation,
-          distance: point.distance,
-        })
+    // Set canvas size with DPR for crisp rendering
+    canvas.width = width * dpr
+    canvas.height = height * dpr
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+    ctx.scale(dpr, dpr)
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height)
+
+    // Calculate bounds
+    const elevations = profile.map(p => p.elevation)
+    const minElev = Math.min(...elevations)
+    const maxElev = Math.max(...elevations)
+    const elevRange = maxElev - minElev || 1
+    const maxDistance = profile[profile.length - 1].distance
+
+    // Padding
+    const padding = { top: 10, right: 10, bottom: 25, left: 40 }
+    const chartWidth = width - padding.left - padding.right
+    const chartHeight = height - padding.top - padding.bottom
+
+    // Helper to convert data to canvas coords
+    const toX = (distance) => padding.left + (distance / maxDistance) * chartWidth
+    const toY = (elevation) => padding.top + chartHeight - ((elevation - minElev) / elevRange) * chartHeight
+
+    // Draw grid lines (subtle)
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)'
+    ctx.lineWidth = 1
+
+    // Horizontal grid (elevation)
+    const elevSteps = 4
+    for (let i = 0; i <= elevSteps; i++) {
+      const y = padding.top + (chartHeight / elevSteps) * i
+      ctx.beginPath()
+      ctx.moveTo(padding.left, y)
+      ctx.lineTo(width - padding.right, y)
+      ctx.stroke()
+    }
+
+    // Draw the filled area under the curve
+    const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom)
+    gradient.addColorStop(0, `${color}40`)
+    gradient.addColorStop(1, `${color}05`)
+
+    ctx.beginPath()
+    ctx.moveTo(toX(0), height - padding.bottom)
+
+    profile.forEach((point, i) => {
+      const x = toX(point.distance)
+      const y = toY(point.elevation)
+      if (i === 0) {
+        ctx.lineTo(x, y)
+      } else {
+        ctx.lineTo(x, y)
+      }
+    })
+
+    ctx.lineTo(toX(maxDistance), height - padding.bottom)
+    ctx.closePath()
+    ctx.fillStyle = gradient
+    ctx.fill()
+
+    // Draw the line
+    ctx.beginPath()
+    profile.forEach((point, i) => {
+      const x = toX(point.distance)
+      const y = toY(point.elevation)
+      if (i === 0) {
+        ctx.moveTo(x, y)
+      } else {
+        ctx.lineTo(x, y)
+      }
+    })
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+
+    // Draw axis labels
+    ctx.fillStyle = '#64748b'
+    ctx.font = '10px Inter, system-ui, sans-serif'
+
+    // Y-axis labels (elevation)
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    for (let i = 0; i <= elevSteps; i++) {
+      const elev = minElev + (elevRange / elevSteps) * (elevSteps - i)
+      const y = padding.top + (chartHeight / elevSteps) * i
+      ctx.fillText(`${Math.round(elev)}m`, padding.left - 5, y)
+    }
+
+    // X-axis labels (distance)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    const distKm = maxDistance / 1000
+    const distSteps = Math.min(5, Math.ceil(distKm))
+    for (let i = 0; i <= distSteps; i++) {
+      const dist = (maxDistance / distSteps) * i
+      const x = toX(dist)
+      ctx.fillText(`${(dist / 1000).toFixed(1)}`, x, height - padding.bottom + 5)
+    }
+
+    // Draw "km" label at end
+    ctx.textAlign = 'left'
+    ctx.fillText('km', width - padding.right + 5, height - padding.bottom + 5)
+
+    // Draw hover point if exists
+    if (hoveredData && hoveredData.index >= 0 && hoveredData.index < profile.length) {
+      const point = profile[hoveredData.index]
+      const x = toX(point.distance)
+      const y = toY(point.elevation)
+
+      // Solid vertical bar
+      ctx.beginPath()
+      ctx.moveTo(x, padding.top)
+      ctx.lineTo(x, height - padding.bottom)
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      // Point circle
+      ctx.beginPath()
+      ctx.arc(x, y, 6, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.strokeStyle = 'white'
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+  }, [profile, dimensions, color, hoveredData])
+
+  // Handle mouse interaction
+  const handleMouseMove = useCallback((e) => {
+    if (!containerRef.current || !profile || profile.length < 2) return
+
+    const rect = containerRef.current.getBoundingClientRect()
+    const padding = { left: 40, right: 10 }
+    const chartWidth = dimensions.width - padding.left - padding.right
+
+    const mouseX = e.clientX - rect.left - padding.left
+    const percentage = mouseX / chartWidth
+
+    if (percentage < 0 || percentage > 1) {
+      setHoveredData(null)
+      onHoverPoint?.(null)
+      return
+    }
+
+    const maxDistance = profile[profile.length - 1].distance
+    const targetDistance = percentage * maxDistance
+
+    // Find closest point
+    let closestIndex = 0
+    let closestDiff = Math.abs(profile[0].distance - targetDistance)
+
+    for (let i = 1; i < profile.length; i++) {
+      const diff = Math.abs(profile[i].distance - targetDistance)
+      if (diff < closestDiff) {
+        closestDiff = diff
+        closestIndex = i
       }
     }
-  }, [hoveredIndex, onHoverPoint])
 
-  const handleChartMouseLeave = useCallback(() => {
-    setHoveredIndex(null)
-    if (onHoverPoint) {
-      onHoverPoint(null)
-    }
+    const point = profile[closestIndex]
+    setHoveredData({ index: closestIndex, point })
+
+    onHoverPoint?.({
+      lat: point.lat,
+      lng: point.lng,
+      elevation: point.elevation,
+      distance: point.distance,
+    })
+  }, [profile, dimensions, onHoverPoint])
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredData(null)
+    onHoverPoint?.(null)
   }, [onHoverPoint])
 
+  // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-6 text-slate-400">
+      <div
+        className="flex items-center justify-center text-slate-400"
+        style={{ height }}
+      >
         <Loader2 className="w-5 h-5 animate-spin mr-2" />
         <span className="text-sm">Loading elevation...</span>
       </div>
     )
   }
 
-  const validPoints = profile.filter(p => p.elevation !== null)
-
-  // Update ref so handlers can access latest valid points
-  validPointsRef.current = validPoints
-
-  if (error || !profile.length) {
+  // Error state
+  if (error || !profile) {
     return (
-      <div className="text-center py-4 text-slate-500 text-sm">
+      <div
+        className="flex items-center justify-center text-slate-500 text-sm"
+        style={{ height }}
+      >
         {error || 'Elevation data unavailable'}
       </div>
     )
   }
 
-  if (validPoints.length < 2) {
-    return null
-  }
-
-  // Format data for Recharts
-  const chartData = validPoints.map(p => ({
-    ...p,
-    distanceKm: p.distance / 1000,
-    elevationRounded: Math.round(p.elevation),
-  }))
-
-  const minElev = Math.min(...validPoints.map(p => p.elevation))
-  const maxElev = Math.max(...validPoints.map(p => p.elevation))
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload
-      return (
-        <div className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 shadow-lg">
-          <p className="text-xs text-slate-400">Distance</p>
-          <p className="text-sm font-semibold text-white">{data.distanceKm.toFixed(2)} km</p>
-          <p className="text-xs text-slate-400 mt-1">Elevation</p>
-          <p className="text-sm font-semibold text-white">{data.elevationRounded} m</p>
-        </div>
-      )
-    }
-    return null
-  }
+  const stats = calculateElevationStats(profile)
 
   return (
-    <div className="space-y-3">
-      {/* Elevation chart */}
-      <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
-            <Mountain className="w-3 h-3" />
-            Elevation Profile
-          </span>
-          <div className="flex items-center gap-3 text-xs text-slate-500">
-            <span>{Math.round(minElev)}m</span>
-            <span>-</span>
-            <span>{Math.round(maxElev)}m</span>
+    <div className="space-y-2">
+      {/* Canvas chart */}
+      <div
+        ref={containerRef}
+        className="relative cursor-crosshair"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        style={{ height }}
+      >
+        <canvas
+          ref={canvasRef}
+          className="block w-full"
+          style={{ height }}
+        />
+
+        {/* Tooltip */}
+        {hoveredData && (
+          <div
+            className="absolute top-0 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-slate-700 rounded-lg px-3 py-2 shadow-lg pointer-events-none z-10"
+          >
+            <div className="flex items-center gap-4 text-xs">
+              <div>
+                <span className="text-slate-400">Distance: </span>
+                <span className="text-white font-medium">
+                  {(hoveredData.point.distance / 1000).toFixed(2)} km
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Elevation: </span>
+                <span className="text-white font-medium">
+                  {Math.round(hoveredData.point.elevation)} m
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div
-          ref={chartRef}
-          className="h-32 w-full"
-          onMouseMove={handleChartMouseMove}
-          onMouseLeave={handleChartMouseLeave}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={chartData}
-              margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id={`gradient-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={color} stopOpacity={0.4} />
-                  <stop offset="95%" stopColor={color} stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
-
-              <XAxis
-                dataKey="distanceKm"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#64748b', fontSize: 10 }}
-                tickFormatter={(value) => `${value.toFixed(1)}`}
-                interval="preserveStartEnd"
-              />
-
-              <YAxis
-                domain={[minElev - 10, maxElev + 10]}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#64748b', fontSize: 10 }}
-                tickFormatter={(value) => `${Math.round(value)}`}
-                width={35}
-              />
-
-              <Tooltip
-                content={<CustomTooltip />}
-                cursor={{
-                  stroke: '#94a3b8',
-                  strokeWidth: 1,
-                  strokeDasharray: '4 4',
-                }}
-              />
-
-              <Area
-                type="monotone"
-                dataKey="elevation"
-                stroke={color}
-                strokeWidth={2}
-                fill={`url(#gradient-${color.replace('#', '')})`}
-                dot={false}
-                activeDot={{
-                  r: 6,
-                  fill: color,
-                  stroke: '#fff',
-                  strokeWidth: 2,
-                }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="flex justify-between text-xs text-slate-500 mt-1 px-1">
-          <span>0 km</span>
-          <span>{(chartData[chartData.length - 1]?.distanceKm || 0).toFixed(1)} km</span>
-        </div>
+        )}
       </div>
 
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-slate-800/30 rounded-lg p-2 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-green-400" />
-            <div>
-              <p className="text-xs text-slate-500">Elevation Gain</p>
-              <p className="text-sm font-medium text-slate-200">{stats.gain} m</p>
-            </div>
-          </div>
-          <div className="bg-slate-800/30 rounded-lg p-2 flex items-center gap-2">
-            <TrendingDown className="w-4 h-4 text-red-400" />
-            <div>
-              <p className="text-xs text-slate-500">Elevation Loss</p>
-              <p className="text-sm font-medium text-slate-200">{stats.loss} m</p>
-            </div>
-          </div>
+      {/* Compact stats row */}
+      <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="text-green-400">↑</span>
+            <span className="text-slate-300 font-medium">{stats.gain}m</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-red-400">↓</span>
+            <span className="text-slate-300 font-medium">{stats.loss}m</span>
+          </span>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <span>Min: {stats.min}m</span>
+          <span>•</span>
+          <span>Max: {stats.max}m</span>
+        </div>
+      </div>
     </div>
   )
 }
