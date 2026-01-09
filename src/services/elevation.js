@@ -21,9 +21,10 @@ export async function fetchElevationProfile(coordinates) {
     return []
   }
 
-  // Sample coordinates - Open-Meteo has URL length limits, keep under 50 points
-  const maxPoints = 50
-  const step = Math.max(1, Math.floor(coordinates.length / maxPoints))
+  // Sample coordinates - aim for ~100 points for better resolution
+  // Open-Meteo allows 50 points per request, so we'll batch if needed
+  const targetPoints = 100
+  const step = Math.max(1, Math.floor(coordinates.length / targetPoints))
   const sampledCoords = []
 
   // Always include first and last point
@@ -38,26 +39,34 @@ export async function fetchElevationProfile(coordinates) {
   console.log('[Elevation] Fetching elevation for', sampledCoords.length, 'points from', coordinates.length, 'total')
 
   try {
-    // Open-Meteo expects: ?latitude=lat1,lat2,...&longitude=lng1,lng2,...
-    const latitudes = sampledCoords.map(c => c[1].toFixed(6)).join(',')
-    const longitudes = sampledCoords.map(c => c[0].toFixed(6)).join(',')
+    // Open-Meteo has a limit of ~50 points per request, so batch if needed
+    const batchSize = 50
+    const allElevations = []
 
-    const url = `${OPEN_METEO_URL}?latitude=${latitudes}&longitude=${longitudes}`
-    console.log('[Elevation] Fetching from Open-Meteo...')
+    for (let i = 0; i < sampledCoords.length; i += batchSize) {
+      const batch = sampledCoords.slice(i, i + batchSize)
+      const latitudes = batch.map(c => c[1].toFixed(6)).join(',')
+      const longitudes = batch.map(c => c[0].toFixed(6)).join(',')
 
-    const response = await fetch(url)
+      const url = `${OPEN_METEO_URL}?latitude=${latitudes}&longitude=${longitudes}`
+      console.log('[Elevation] Fetching batch', Math.floor(i / batchSize) + 1, 'of', Math.ceil(sampledCoords.length / batchSize))
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      const response = await fetch(url)
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.elevation || !Array.isArray(data.elevation)) {
+        throw new Error('Invalid response format')
+      }
+
+      allElevations.push(...data.elevation)
     }
 
-    const data = await response.json()
-    console.log('[Elevation] Response received, elevations:', data.elevation?.length || 0)
-
-    // Open-Meteo returns { elevation: [e1, e2, ...] }
-    if (!data.elevation || !Array.isArray(data.elevation)) {
-      throw new Error('Invalid response format')
-    }
+    console.log('[Elevation] Response received, elevations:', allElevations.length)
 
     // Build profile with cumulative distance
     let cumulativeDistance = 0
@@ -65,7 +74,7 @@ export async function fetchElevationProfile(coordinates) {
 
     for (let i = 0; i < sampledCoords.length; i++) {
       const [lng, lat] = sampledCoords[i]
-      const elevation = data.elevation[i]
+      const elevation = allElevations[i]
 
       // Calculate distance from previous point
       if (i > 0) {
@@ -84,12 +93,80 @@ export async function fetchElevationProfile(coordinates) {
     const validCount = profile.filter(p => p.elevation !== null).length
     console.log('[Elevation] Got', profile.length, 'points,', validCount, 'with valid elevation')
 
-    return profile
+    // Apply smoothing to reduce spikes
+    const smoothedProfile = smoothElevationProfile(profile)
+    console.log('[Elevation] Applied smoothing to profile')
+
+    return smoothedProfile
 
   } catch (err) {
     console.error('[Elevation] Open-Meteo failed:', err.message)
     return generateFallbackProfile(sampledCoords)
   }
+}
+
+/**
+ * Smooth elevation profile using weighted moving average
+ * Reduces spikes while preserving overall shape
+ * @param {Array} profile - Array of { lat, lng, elevation, distance }
+ * @param {number} windowSize - Size of the smoothing window (default 9)
+ * @returns {Array} - Smoothed profile
+ */
+function smoothElevationProfile(profile, windowSize = 9) {
+  if (profile.length < windowSize) return profile
+
+  // Gaussian-like weights for the window (center-weighted)
+  const weights = []
+  const halfWindow = Math.floor(windowSize / 2)
+  let weightSum = 0
+
+  for (let i = 0; i < windowSize; i++) {
+    const distance = Math.abs(i - halfWindow)
+    const weight = Math.exp(-(distance * distance) / (2 * (halfWindow / 2) ** 2))
+    weights.push(weight)
+    weightSum += weight
+  }
+
+  // Normalize weights
+  for (let i = 0; i < weights.length; i++) {
+    weights[i] /= weightSum
+  }
+
+  return profile.map((point, index) => {
+    if (point.elevation === null) return point
+
+    // Keep first and last few points unchanged to preserve endpoints
+    if (index < halfWindow || index >= profile.length - halfWindow) {
+      return point
+    }
+
+    // Calculate weighted average of neighboring elevations
+    let smoothedElevation = 0
+    let validWeightSum = 0
+
+    for (let j = -halfWindow; j <= halfWindow; j++) {
+      const neighborIndex = index + j
+      const neighborPoint = profile[neighborIndex]
+
+      if (neighborPoint && neighborPoint.elevation !== null) {
+        const weightIndex = j + halfWindow
+        smoothedElevation += neighborPoint.elevation * weights[weightIndex]
+        validWeightSum += weights[weightIndex]
+      }
+    }
+
+    // Normalize by actual valid weights used
+    if (validWeightSum > 0) {
+      smoothedElevation /= validWeightSum
+    } else {
+      smoothedElevation = point.elevation
+    }
+
+    return {
+      ...point,
+      elevation: smoothedElevation,
+    }
+  })
 }
 
 /**
