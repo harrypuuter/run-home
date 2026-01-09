@@ -494,7 +494,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
             ))}
 
             {/* Generate more button */}
-            {hasMoreCandidates && !calculatingRoutes && calculatedRoutes.length < ROUTES_TARGET && (
+            {hasMoreCandidates && !calculatingRoutes && (
               <button
                 onClick={handleGenerateMore}
                 className="w-full p-3 rounded-xl bg-slate-800/60 backdrop-blur-md border border-slate-600/50
