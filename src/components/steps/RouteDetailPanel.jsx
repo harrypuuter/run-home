@@ -70,12 +70,15 @@ export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownlo
         <h2 className="font-semibold text-white">Route Details</h2>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onToggleShowTransit?.()}
-            className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${showTransitOnMap ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700/50'}`}
+            onClick={() => dbApiAvailable ? onToggleShowTransit?.() : undefined}
+            className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${showTransitOnMap ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700/50'} ${!dbApiAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-pressed={showTransitOnMap}
-            aria-label={showTransitOnMap ? 'Hide transit on map' : 'Show transit on map'}
+            aria-disabled={!dbApiAvailable}
+            title={!dbApiAvailable ? 'Transit API unavailable' : (showTransitOnMap ? 'Hide transit on map' : 'Show transit')}
+            aria-label={showTransitOnMap ? 'Hide transit on map' : 'Show transit'}
+            disabled={!dbApiAvailable}
           >
-            {showTransitOnMap ? 'Transit on map' : 'Show transit'}
+            {showTransitOnMap ? 'Transit on map' : (dbApiAvailable ? 'Show transit' : 'Transit unavailable')}
           </button>
         </div>
       </div>

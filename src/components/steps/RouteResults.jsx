@@ -330,10 +330,19 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   const hasMoreCandidates = candidatesRef.current.some(c => !checkedCandidatesRef.current.has(c.id))
   const [showTransitOnMap, setShowTransitOnMap] = useState(false)
 
+  // Ensure overlay is cleared if the DB API becomes unavailable
+  useEffect(() => {
+    if (!dbApiAvailable && showTransitOnMap) {
+      setShowTransitOnMap(false)
+    }
+  }, [dbApiAvailable, showTransitOnMap])
+
   const selectedItem = selectedRouteIndex !== null ? calculatedRoutes[selectedRouteIndex] : null
 
   // Compute transit overlay GeoJSON for selected route when requested
   const transitOverlay = (function() {
+    // Only provide overlay if DB API is available and user requested it
+    if (!dbApiAvailable) return null
     if (!selectedItem || !showTransitOnMap || !selectedItem.transitJourney) return null
 
     const coords = []
