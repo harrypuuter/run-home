@@ -161,6 +161,14 @@ export default function MobileBottomSheet({
                   </div>
                 </button>
               ))}
+
+              {/* Mobile Find More button */}
+              {hasMoreCandidates && !calculatingRoutes && (
+                <button onClick={() => onGenerateMore?.()} className="w-full p-3 rounded-xl bg-slate-800/60 border border-slate-600/50 text-slate-300 text-sm hover:bg-slate-800/80 transition-colors flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+                  Find More Routes
+                </button>
+              )}
             </div>
           )}
         </div>

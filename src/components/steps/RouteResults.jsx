@@ -331,6 +331,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   }, [homeLocation, activity])
 
   const handleGenerateMore = useCallback(async () => {
+    console.log('[RouteResults] Find More clicked - calculatingRoutes:', calculatingRoutes, 'candidates left:', candidatesRef.current.length)
     if (calculatingRoutes || isCalculatingRef.current) return
     // Continue calculating with remaining candidates at current tolerance
     calculateRoutes(candidatesRef.current, currentTolerance)
@@ -521,6 +522,10 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           onDownloadGPX={handleDownloadGPX}
           onHoverPoint={setHoveredPoint}
           dbApiAvailable={dbApiAvailable}
+          // new props for mobile find more
+          hasMoreCandidates={hasMoreCandidates}
+          calculatingRoutes={calculatingRoutes}
+          onGenerateMore={handleGenerateMore}
         />
 
         {/* Detail Panel (slides in from right) */}
