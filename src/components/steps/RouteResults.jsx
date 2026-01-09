@@ -5,6 +5,7 @@ import MapLibreMap from '../MapLibreMap'
 import ElevationProfile from '../ElevationProfile'
 import RouteDetailPanel from './RouteDetailPanel'
 import TransitJourneyDetails from './TransitJourneyDetails'
+import MobileBottomSheet from '../../components/MobileBottomSheet'
 import { findJourneys, getStopIcon, getProductIcon, formatDelay, formatTime } from '../../services/deutschebahn'
 import { fetchOSMTransitStations } from '../../services/nominatim'
 import { calculateRoute } from '../../services/osrm'
@@ -506,20 +507,21 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           </div>
         </div>
 
-        {/* Mobile Bottom Sheet (simplified for now) */}
-        <div className="absolute bottom-0 left-0 right-0 md:hidden bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50 z-10">
-          <div className="p-3 space-y-2 max-h-48 overflow-y-auto">
-            {calculatedRoutes.slice(0, 5).map((item, index) => (
-              <RouteCardMini
-                key={item.stop.id}
-                item={item}
-                index={index}
-                isSelected={selectedRouteIndex === index}
-                onSelect={handleRouteClick}
-              />
-            ))}
-          </div>
-        </div>
+        {/* Mobile Bottom Sheet */}
+        <MobileBottomSheet
+          routes={calculatedRoutes}
+          selectedRouteIndex={selectedRouteIndex}
+          onSelect={handleRouteClick}
+          onClose={() => setSelectedRouteIndex(null)}
+          showTransitOnMap={showTransitOnMap}
+          onToggleShowTransit={() => setShowTransitOnMap(s => !s)}
+          activity={activity}
+          pace={pace}
+          onPaceChange={setPace}
+          onDownloadGPX={handleDownloadGPX}
+          onHoverPoint={setHoveredPoint}
+          dbApiAvailable={dbApiAvailable}
+        />
 
         {/* Detail Panel (slides in from right) */}
         {selectedItem && (
