@@ -39,7 +39,14 @@ function StatBox({ icon, label, value }) {
   )
 }
 
-export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownloadGPX, activity, pace, onPaceChange, showTransitOnMap = false, onToggleShowTransit }) {
+export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownloadGPX, activity, pace, onPaceChange, showTransitOnMap = false, onToggleShowTransit, dbApiAvailable = false }) {
+  if (!item || !item.route) {
+    return (
+      <div className="h-full flex items-center justify-center text-slate-400">
+        Route details unavailable
+      </div>
+    )
+  }
   const distanceKm = item.route.distance / 1000
   const duration = calculateDuration(distanceKm, pace)
   const calories = calculateCalories(distanceKm, 0, activity)

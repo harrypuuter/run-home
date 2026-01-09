@@ -526,6 +526,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
               onPaceChange={setPace}
               showTransitOnMap={showTransitOnMap}
               onToggleShowTransit={() => setShowTransitOnMap(s => !s)}
+              dbApiAvailable={dbApiAvailable}
             />
           </div>
         )}
