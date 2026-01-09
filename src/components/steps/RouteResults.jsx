@@ -299,14 +299,22 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   // Event Handlers
   // ============================================
   const handleRouteClick = useCallback((index) => {
-    setSelectedRouteIndex(prev => prev === index ? null : index)
-    if (selectedRouteIndex === index) {
-      setHoveredPoint(null)
-    } else {
-      // Lazy load transit when route is selected
-      fetchTransitForRoute(index)
-    }
-  }, [selectedRouteIndex, fetchTransitForRoute])
+    // Compute the next selected index deterministically and act on it immediately
+    setSelectedRouteIndex(prev => {
+      const next = prev === index ? null : index
+
+      if (next === null) {
+        // Panel closing - clear hover and transit overlay
+        setHoveredPoint(null)
+        setShowTransitOnMap(false)
+      } else {
+        // Panel opening - lazy load transit
+        fetchTransitForRoute(next)
+      }
+
+      return next
+    })
+  }, [fetchTransitForRoute])
 
   const handleDownloadGPX = useCallback(async (e, item) => {
     e.stopPropagation()
