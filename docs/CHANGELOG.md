@@ -1,6 +1,56 @@
 # Run-Home App - Changelog
 
-> **Last Updated:** January 8, 2026
+> **Last Updated:** January 9, 2026
+
+---
+
+## Version 0.4.0 (January 9, 2026) - Algorithm Rework & UI Polish
+
+### 🔄 Algorithm Rework
+
+#### Simplified Route Discovery
+- **OSM-Only Station Discovery:** Replaced dual DB/OSM approach with OSM Overpass API only
+- **Annulus Search:** Searches for stations between 50%-100% of target distance (inner/outer radius)
+- **Adaptive Tolerance:** Starts at 10%, relaxes to 20%, then 30% if not enough routes found
+- **5 Routes Per Page:** Increased from 3 to show more options
+
+#### Lazy Transit Loading
+- Transit directions now loaded on-demand when user selects a route
+- Faster initial load time with station discovery only
+
+### ✨ UI Improvements
+
+#### Elevation Profile Enhancements
+- **Increased Height:** 180px for better visibility
+- **More Data Points:** 100 points (up from 50) via batched API requests
+- **Gaussian Smoothing:** Removes spikes while preserving shape (9-point window)
+- **Full-km X-axis Ticks:** Shows 0, 1, 2, 3... instead of decimals
+- **Fixed Aspect Ratio:** Canvas now renders correctly without stretching
+- **Fixed Mouse Tracking:** Hover line now aligns correctly with cursor
+
+#### Map Popup Styling
+- Dark theme popups matching app design
+- Removed close button for cleaner look
+- Fixed text colors for dark background
+
+### 🐛 Bug Fixes
+
+#### MapLibre Fixes
+- Fixed WebGL context check that was blocking route rendering
+- Added event handler cleanup to prevent memory leaks
+- Fixed route handlers accumulating on re-renders
+
+### 🛠️ Developer Tools
+
+#### Debug Page
+- New `/run-home/debug` route to test MapLibre directly
+- Pre-configured test locations (Berlin, Munich, Hamburg, Frankfurt)
+- Configurable distance, activity, and direction
+- Bypass wizard flow for faster iteration
+
+### 📚 Documentation
+
+- Added `docs/ALGORITHM_DESIGN.md` with complete algorithm flow documentation
 
 ---
 

@@ -24,6 +24,7 @@ function MapLibreMap({
   const map = useRef(null)
   const markersRef = useRef([])
   const hoveredMarkerRef = useRef(null)
+  const routeHandlersRef = useRef([])
   const [mapLoaded, setMapLoaded] = useState(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
   const currentDarkModeRef = useRef(darkMode)
@@ -137,7 +138,7 @@ function MapLibreMap({
 
     const homeMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
       .setLngLat([marker[1], marker[0]]) // [lng, lat]
-      .setPopup(new maplibregl.Popup().setHTML('<strong>🏠 Home</strong>'))
+      .setPopup(new maplibregl.Popup({ closeButton: false }).setHTML('<strong>🏠 Home</strong>'))
       .addTo(map.current)
 
     homeMarker._type = 'home'
@@ -151,20 +152,23 @@ function MapLibreMap({
       return
     }
 
-    // Check if WebGL context is valid
-    try {
-      const canvas = map.current.getCanvas()
-      const gl = canvas.getContext('webgl') || canvas.getContext('webgl2')
-      if (!gl || gl.isContextLost()) {
-        console.log('[MapLibreMap] Routes effect skipped - WebGL context lost')
-        return
-      }
-    } catch (e) {
-      console.log('[MapLibreMap] Routes effect skipped - canvas check failed')
+    // Check if map is still valid (safer than checking WebGL directly)
+    if (!map.current.loaded() || !map.current.isStyleLoaded()) {
+      console.log('[MapLibreMap] Routes effect skipped - map or style not ready')
       return
     }
 
     console.log('[MapLibreMap] Routes effect running - adding', routes.length, 'routes')
+
+    // Remove previous event handlers
+    routeHandlersRef.current.forEach(({ layerId, type, handler }) => {
+      try {
+        map.current.off(type, layerId, handler)
+      } catch (e) {
+        // Ignore - layer may no longer exist
+      }
+    })
+    routeHandlersRef.current = []
 
     // Remove existing route sources and layers (try-catch because style change removes them)
     for (let i = 0; i < 20; i++) {
@@ -246,18 +250,27 @@ function MapLibreMap({
           },
         })
 
-        // Add click handler for route
-        map.current.on('click', `${sourceId}-line`, () => {
+        // Add click handler for route and store for cleanup
+        const clickHandler = () => {
           onRouteClick?.(index)
-        })
-
-        // Change cursor on hover
-        map.current.on('mouseenter', `${sourceId}-line`, () => {
+        }
+        const mouseEnterHandler = () => {
           map.current.getCanvas().style.cursor = 'pointer'
-        })
-        map.current.on('mouseleave', `${sourceId}-line`, () => {
+        }
+        const mouseLeaveHandler = () => {
           map.current.getCanvas().style.cursor = ''
-        })
+        }
+
+        map.current.on('click', `${sourceId}-line`, clickHandler)
+        map.current.on('mouseenter', `${sourceId}-line`, mouseEnterHandler)
+        map.current.on('mouseleave', `${sourceId}-line`, mouseLeaveHandler)
+
+        // Store handlers for cleanup
+        routeHandlersRef.current.push(
+          { layerId: `${sourceId}-line`, type: 'click', handler: clickHandler },
+          { layerId: `${sourceId}-line`, type: 'mouseenter', handler: mouseEnterHandler },
+          { layerId: `${sourceId}-line`, type: 'mouseleave', handler: mouseLeaveHandler }
+        )
       } catch (err) {
         console.error('Failed to add route layer:', err)
       }
@@ -279,9 +292,9 @@ function MapLibreMap({
       const stopMarker = new maplibregl.Marker({ element: stopEl, anchor: 'center' })
         .setLngLat([item.stop.lng, item.stop.lat])
         .setPopup(
-          new maplibregl.Popup().setHTML(`
+          new maplibregl.Popup({ closeButton: false }).setHTML(`
             <strong>${item.stop.name || 'Unnamed Stop'}</strong><br/>
-            <span style="color: #666; text-transform: capitalize;">${item.stop.type || 'Transit stop'}</span>
+            <span style="color: #94a3b8; text-transform: capitalize;">${item.stop.type || 'Transit stop'}</span>
           `)
         )
         .addTo(map.current)

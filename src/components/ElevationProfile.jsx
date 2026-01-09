@@ -15,7 +15,8 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [hoveredData, setHoveredData] = useState(null)
-  const [dimensions, setDimensions] = useState({ width: 0, height })
+  // Initialize with a reasonable default width to prevent initial render issues
+  const [dimensions, setDimensions] = useState({ width: 300, height })
 
   // Fetch elevation data
   useEffect(() => {
@@ -107,18 +108,32 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
     const container = containerRef.current
     if (!container) return
 
+    const updateDimensions = () => {
+      const width = container.clientWidth
+      if (width > 0) {
+        setDimensions({ width, height })
+      }
+    }
+
+    // Initial size - use multiple frames to ensure layout is complete
+    requestAnimationFrame(() => {
+      updateDimensions()
+      // Double-check after another frame in case layout wasn't ready
+      requestAnimationFrame(updateDimensions)
+    })
+
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height,
-        })
+        if (entry.contentRect.width > 0) {
+          setDimensions({
+            width: entry.contentRect.width,
+            height,
+          })
+        }
       }
     })
 
     observer.observe(container)
-    // Initial size
-    setDimensions({ width: container.clientWidth, height })
 
     return () => observer.disconnect()
   }, [height])
@@ -126,23 +141,31 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
   // Draw the elevation profile on canvas
   useEffect(() => {
     const canvas = canvasRef.current
+    const container = containerRef.current
     console.log('[ElevationProfile] Draw effect - canvas:', !!canvas, 'profile:', profile?.length, 'dimensions:', dimensions)
 
-    if (!canvas || !profile || profile.length < 2 || dimensions.width === 0) {
+    if (!canvas || !container || !profile || profile.length < 2 || dimensions.width === 0) {
       console.log('[ElevationProfile] Skipping draw - missing requirements')
       return
     }
 
     const ctx = canvas.getContext('2d')
     const dpr = window.devicePixelRatio || 1
-    const { width, height } = dimensions
 
-    // Set canvas size with DPR for crisp rendering
-    canvas.width = width * dpr
-    canvas.height = height * dpr
-    canvas.style.width = `${width}px`
-    canvas.style.height = `${height}px`
+    // Use container's actual dimensions for accurate rendering
+    const displayWidth = container.clientWidth
+    const displayHeight = height
+
+    // Set canvas bitmap size with DPR for crisp rendering
+    canvas.width = displayWidth * dpr
+    canvas.height = displayHeight * dpr
+
+    // Reset transform and scale for DPR
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.scale(dpr, dpr)
+
+    // Use display dimensions for drawing (not dimensions state which may be stale)
+    const width = displayWidth
 
     // Clear canvas
     ctx.clearRect(0, 0, width, height)
@@ -230,15 +253,21 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
       ctx.fillText(`${Math.round(elev)}m`, padding.left - 5, y)
     }
 
-    // X-axis labels (distance)
+    // X-axis labels (distance) - use whole km values
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
     const distKm = maxDistance / 1000
-    const distSteps = Math.min(5, Math.ceil(distKm))
-    for (let i = 0; i <= distSteps; i++) {
-      const dist = (maxDistance / distSteps) * i
+    const maxKm = Math.ceil(distKm)
+    // Calculate a nice step size (1, 2, 5, or 10 km) based on total distance
+    let kmStep = 1
+    if (maxKm > 20) kmStep = 5
+    else if (maxKm > 10) kmStep = 2
+
+    for (let km = 0; km <= maxKm; km += kmStep) {
+      const dist = km * 1000
+      if (dist > maxDistance) break
       const x = toX(dist)
-      ctx.fillText(`${(dist / 1000).toFixed(1)}`, x, height - padding.bottom + 5)
+      ctx.fillText(`${km}`, x, height - padding.bottom + 5)
     }
 
     // Draw "km" label at end
@@ -268,7 +297,7 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
       ctx.lineWidth = 2
       ctx.stroke()
     }
-  }, [profile, dimensions, color, hoveredData])
+  }, [profile, height, color, hoveredData])
 
   // Handle mouse interaction
   const handleMouseMove = useCallback((e) => {
@@ -276,7 +305,8 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
 
     const rect = containerRef.current.getBoundingClientRect()
     const padding = { left: 40, right: 10 }
-    const chartWidth = dimensions.width - padding.left - padding.right
+    // Use actual displayed width from bounding rect, not stored dimensions
+    const chartWidth = rect.width - padding.left - padding.right
 
     const mouseX = e.clientX - rect.left - padding.left
     const percentage = mouseX / chartWidth
@@ -311,7 +341,7 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
       elevation: point.elevation,
       distance: point.distance,
     })
-  }, [profile, dimensions, onHoverPoint])
+  }, [profile, onHoverPoint])
 
   const handleMouseLeave = useCallback(() => {
     setHoveredData(null)
@@ -350,15 +380,15 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
       {/* Canvas chart */}
       <div
         ref={containerRef}
-        className="relative cursor-crosshair"
+        className="relative cursor-crosshair w-full"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         style={{ height }}
       >
         <canvas
           ref={canvasRef}
-          className="block w-full"
-          style={{ height }}
+          className="block"
+          style={{ width: '100%', height }}
         />
 
         {/* Tooltip */}

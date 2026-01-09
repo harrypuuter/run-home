@@ -124,18 +124,39 @@ export function formatDuration(seconds) {
 
 /**
  * Calculate distance tolerance based on target distance
+ * Uses adaptive tolerance: starts at 10%, relaxes to 20%, then 30%
  * @param {number} targetKm - Target distance in km
- * @returns {Object} - { min, max } in meters
+ * @param {number} toleranceLevel - 0 = 10%, 1 = 20%, 2 = 30%
+ * @returns {Object} - { min, max } in meters, tolerance percentage
  */
-export function getDistanceTolerance(targetKm) {
+export function getDistanceTolerance(targetKm, toleranceLevel = 0) {
   const targetMeters = targetKm * 1000
-  const percentTolerance = targetMeters * 0.30 // 30% - generous to find more routes
-  const minTolerance = 2500 // 2.5 km minimum
-
-  const tolerance = Math.max(percentTolerance, minTolerance)
+  const tolerances = [0.10, 0.20, 0.30] // 10%, 20%, 30%
+  const tolerance = tolerances[Math.min(toleranceLevel, tolerances.length - 1)]
 
   return {
-    min: targetMeters - tolerance,
-    max: targetMeters + tolerance,
+    min: targetMeters * (1 - tolerance),
+    max: targetMeters * (1 + tolerance),
+    tolerance,
+  }
+}
+
+/**
+ * All tolerance levels for adaptive search
+ */
+export const TOLERANCE_LEVELS = [0, 1, 2] // 10%, 20%, 30%
+
+/**
+ * Calculate search annulus radii based on target distance
+ * Inner radius: 50% of target distance
+ * Outer radius: 100% of target distance
+ * @param {number} targetKm - Target distance in km
+ * @returns {Object} - { innerRadius, outerRadius } in meters
+ */
+export function getSearchRadii(targetKm) {
+  const targetMeters = targetKm * 1000
+  return {
+    innerRadius: targetMeters * 0.5,
+    outerRadius: targetMeters * 1.0,
   }
 }

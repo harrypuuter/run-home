@@ -67,27 +67,28 @@ export async function reverseGeocode(lat, lng) {
 
 /**
  * Fetch nearby transit stations from OpenStreetMap Overpass API
- * Used as fallback when Deutsche Bahn API is unavailable
- * @param {Object} options - { lat, lng, radiusMeters }
+ * Uses annulus (ring) search: only returns stations between innerRadius and outerRadius
+ * @param {Object} options - { lat, lng, innerRadius, outerRadius } (radii in meters)
  * @returns {Promise<Array>} - Array of station objects
  */
-export async function fetchOSMTransitStations({ lat, lng, radiusMeters = 15000 }) {
+export async function fetchOSMTransitStations({ lat, lng, innerRadius = 0, outerRadius = 15000 }) {
   const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
 
-  // Query for railway stations, tram stops, and bus stops
+  // Query for railway stations within outer radius
+  // We filter by inner radius in post-processing for more accurate results
   const query = `
     [out:json][timeout:25];
     (
-      node["railway"="station"](around:${radiusMeters},${lat},${lng});
-      node["railway"="halt"](around:${radiusMeters},${lat},${lng});
-      node["public_transport"="station"](around:${radiusMeters},${lat},${lng});
-      node["railway"="tram_stop"](around:${radiusMeters},${lat},${lng});
+      node["railway"="station"](around:${outerRadius},${lat},${lng});
+      node["railway"="halt"](around:${outerRadius},${lat},${lng});
+      node["public_transport"="station"](around:${outerRadius},${lat},${lng});
+      node["railway"="tram_stop"](around:${outerRadius},${lat},${lng});
     );
     out body;
   `
 
   try {
-    console.log('[OSM] Fetching transit stations within', radiusMeters, 'm of', lat, lng)
+    console.log('[OSM] Fetching transit stations in annulus:', innerRadius, '-', outerRadius, 'm from', lat, lng)
 
     const response = await fetch(OVERPASS_URL, {
       method: 'POST',
@@ -102,7 +103,7 @@ export async function fetchOSMTransitStations({ lat, lng, radiusMeters = 15000 }
     }
 
     const data = await response.json()
-    console.log('[OSM] Found', data.elements?.length || 0, 'transit stations')
+    console.log('[OSM] Found', data.elements?.length || 0, 'transit stations (before annulus filter)')
 
     if (!data.elements || data.elements.length === 0) {
       return []
@@ -130,11 +131,14 @@ export async function fetchOSMTransitStations({ lat, lng, radiusMeters = 15000 }
       }
     })
 
-    // Filter out unnamed stations and sort by distance
-    return stations
+    // Filter: named stations within the annulus (between inner and outer radius)
+    const filtered = stations
       .filter(s => s.name !== 'Unnamed Station')
+      .filter(s => s.distance >= innerRadius && s.distance <= outerRadius)
       .sort((a, b) => a.distance - b.distance)
-      .slice(0, 50)
+
+    console.log('[OSM] After annulus filter:', filtered.length, 'stations')
+    return filtered
 
   } catch (err) {
     console.error('[OSM] Failed to fetch transit stations:', err)

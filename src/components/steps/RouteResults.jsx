@@ -3,67 +3,23 @@ import { Loader2, RotateCcw, Clock, Route, RefreshCw, MapPin, Navigation, Train,
 import Button from '../ui/Button'
 import MapLibreMap from '../MapLibreMap'
 import ElevationProfile from '../ElevationProfile'
-import { fetchNearbyStops, findJourneys, getStopIcon, getProductIcon, formatDelay, formatTime, getApiAvailability } from '../../services/deutschebahn'
+import { findJourneys, getStopIcon, getProductIcon, formatDelay, formatTime } from '../../services/deutschebahn'
 import { fetchOSMTransitStations } from '../../services/nominatim'
 import { calculateRoute } from '../../services/osrm'
-import { filterByDirection, formatDistance, formatDuration, getDistanceTolerance } from '../../services/geo'
+import { filterByDirection, formatDistance, formatDuration, getDistanceTolerance, getSearchRadii, TOLERANCE_LEVELS } from '../../services/geo'
 import { generateGPX, downloadGPX, generateFilename } from '../../services/gpx'
 import { fetchElevationProfile, calculateElevationStats } from '../../services/elevation'
 
-const ROUTES_PER_PAGE = 3
-const ROUTE_COLORS = ['#3b82f6', '#10b981', '#f59e0b'] // blue, green, amber
+// Configuration
+const ROUTES_TARGET = 5  // Target number of routes to find
+const ROUTE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'] // blue, green, amber, red, purple
+const MAX_CANDIDATES_PER_PASS = 30
+const API_DELAY_MS = 150
 
 // Default pace (min/km) for running/cycling
 const DEFAULT_PACE = {
   run: 5.5, // 5:30 min/km
   bike: 3.0, // 3:00 min/km
-}
-
-/**
- * Generate waypoints for direct routes (when transit API is unavailable)
- */
-function generateDirectRouteWaypoints({ homeLocation, distance, direction }) {
-  const waypoints = []
-  const distanceKm = distance
-  const latOffset = distanceKm / 111
-  const lngOffset = distanceKm / (111 * Math.cos(homeLocation.lat * Math.PI / 180))
-
-  const directions = {
-    north: { lat: latOffset, lng: 0, name: 'North' },
-    northeast: { lat: latOffset * 0.707, lng: lngOffset * 0.707, name: 'Northeast' },
-    east: { lat: 0, lng: lngOffset, name: 'East' },
-    southeast: { lat: -latOffset * 0.707, lng: lngOffset * 0.707, name: 'Southeast' },
-    south: { lat: -latOffset, lng: 0, name: 'South' },
-    southwest: { lat: -latOffset * 0.707, lng: -lngOffset * 0.707, name: 'Southwest' },
-    west: { lat: 0, lng: -lngOffset, name: 'West' },
-    northwest: { lat: latOffset * 0.707, lng: -lngOffset * 0.707, name: 'Northwest' },
-  }
-
-  const selectedDirections = direction === 'any' || !direction
-    ? ['north', 'east', 'south', 'west', 'northeast', 'southeast', 'southwest', 'northwest']
-    : [direction]
-
-  const distanceFactors = [0.8, 1.0, 1.2]
-
-  selectedDirections.forEach((dir) => {
-    const d = directions[dir]
-    if (!d) return
-    distanceFactors.forEach((factor, i) => {
-      waypoints.push({
-        id: `waypoint-${dir}-${i}`,
-        name: `${d.name} Route (${Math.round(distanceKm * factor)}km)`,
-        lat: homeLocation.lat + (d.lat * factor),
-        lng: homeLocation.lng + (d.lng * factor),
-        type: 'waypoint',
-        products: null,
-        distance: distanceKm * factor * 1000,
-        isWaypoint: true,
-      })
-    })
-  })
-
-  waypoints.sort((a, b) => Math.abs(a.distance - distanceKm * 1000) - Math.abs(b.distance - distanceKm * 1000))
-  return waypoints.slice(0, 20)
 }
 
 /**
@@ -237,7 +193,7 @@ function RouteDetailPanel({
             route={item.route}
             color={item.color}
             onHoverPoint={onHoverPoint}
-            height={140}
+            height={180}
           />
         </div>
 
@@ -333,187 +289,208 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   const [calculatedRoutes, setCalculatedRoutes] = useState([])
   const [hoveredPoint, setHoveredPoint] = useState(null)
   const [searchPhase, setSearchPhase] = useState('')
-  const [noTransitMode, setNoTransitMode] = useState(false)
-  const [darkMode, setDarkMode] = useState(false)
+  const [currentTolerance, setCurrentTolerance] = useState(0) // 0 = 10%, 1 = 20%, 2 = 30%
   const [pace, setPace] = useState(DEFAULT_PACE.run)
-  const allStopsRef = useRef([])
-  const searchedStopsRef = useRef(new Set())
+
+  // Refs for tracking state across async operations
+  const candidatesRef = useRef([])
+  const checkedCandidatesRef = useRef(new Set())
   const isCalculatingRef = useRef(false)
   const hasInitializedRef = useRef(false)
 
-  const { homeLocation, distance, activity, departureTime, direction, transitStops, isLoading, error } = state
+  const { homeLocation, distance, activity, departureTime, direction, isLoading, error } = state
 
   // Update pace when activity changes
   useEffect(() => {
     setPace(DEFAULT_PACE[activity] || DEFAULT_PACE.run)
   }, [activity])
 
-  // Fetch nearby transit stops
+  // ============================================
+  // STEP 2: Find candidate start points (OSM only)
+  // ============================================
   useEffect(() => {
-    const loadTransitStops = async () => {
+    if (!homeLocation || hasInitializedRef.current) return
+    hasInitializedRef.current = true
+
+    const findCandidates = async () => {
       updateState({ isLoading: true, error: null })
-      const apiStatus = dbApiAvailable ?? getApiAvailability()
-
-      // Helper to process stops (filter by direction and shuffle)
-      const processStops = (stops) => {
-        const filteredStops = filterByDirection(stops, homeLocation.lat, homeLocation.lng, direction)
-        // Shuffle stops to get different routes each time, but keep closer ones more likely
-        const shuffled = [...filteredStops]
-          .map(s => ({ ...s, sortKey: Math.random() * (1 + (s.distance || 0) / 10000) }))
-          .sort((a, b) => a.sortKey - b.sortKey)
-        return shuffled
-      }
-
-      // Try Deutsche Bahn API first if available
-      if (apiStatus !== false) {
-        setSearchPhase('Finding nearby stations...')
-        try {
-          const stops = await fetchNearbyStops({
-            lat: homeLocation.lat,
-            lng: homeLocation.lng,
-            distance: Math.min(distance * 1000, 50000),
-            results: 50,
-          })
-
-          const processedStops = processStops(stops)
-          allStopsRef.current = processedStops
-          searchedStopsRef.current = new Set()
-          updateState({ transitStops: processedStops, isLoading: false })
-          return
-        } catch (err) {
-          console.error('Failed to fetch transit stops from DB API:', err)
-          // Fall through to OSM fallback
-        }
-      }
-
-      // Fallback to OSM Overpass API for real transit stations
-      setNoTransitMode(true)
-      setSearchPhase('DB API unavailable - fetching stations from OpenStreetMap...')
+      setSearchPhase('Finding nearby stations...')
 
       try {
-        const osmStops = await fetchOSMTransitStations({
+        // Calculate annulus radii based on target distance
+        const { innerRadius, outerRadius } = getSearchRadii(distance)
+        console.log('[Algorithm] Search annulus:', innerRadius, '-', outerRadius, 'm')
+
+        // Fetch stations from OSM Overpass API
+        const stations = await fetchOSMTransitStations({
           lat: homeLocation.lat,
           lng: homeLocation.lng,
-          radiusMeters: Math.min(distance * 1000, 30000),
+          innerRadius,
+          outerRadius,
         })
 
-        if (osmStops.length > 0) {
-          const processedStops = processStops(osmStops)
-          allStopsRef.current = processedStops
-          searchedStopsRef.current = new Set()
-          updateState({ transitStops: processedStops, isLoading: false })
-          console.log('[RouteResults] Using', processedStops.length, 'OSM transit stations')
+        // Filter by direction
+        const filtered = filterByDirection(stations, homeLocation.lat, homeLocation.lng, direction)
+        console.log('[Algorithm] Found', filtered.length, 'candidates after direction filter')
+
+        if (filtered.length === 0) {
+          updateState({
+            isLoading: false,
+            error: 'No transit stations found in the selected area and direction. Try a different distance or direction.'
+          })
           return
         }
-      } catch (osmErr) {
-        console.error('Failed to fetch OSM transit stations:', osmErr)
+
+        // Sort by distance from target (prefer stations that will give routes close to target)
+        const targetDistance = distance * 1000
+        const sorted = [...filtered].sort((a, b) => {
+          const aDiff = Math.abs(a.distance - targetDistance)
+          const bDiff = Math.abs(b.distance - targetDistance)
+          return aDiff - bDiff
+        })
+
+        candidatesRef.current = sorted
+        checkedCandidatesRef.current = new Set()
+        updateState({ isLoading: false })
+
+        // Proceed to route calculation
+        calculateRoutes(sorted, 0)
+      } catch (err) {
+        console.error('[Algorithm] Failed to find candidates:', err)
+        updateState({ isLoading: false, error: 'Failed to find nearby stations. Please try again.' })
       }
-
-      // Last resort: generate waypoint-based routes
-      console.warn('[RouteResults] All station APIs failed, using waypoints')
-      setSearchPhase('Finding routes without transit info...')
-      const waypoints = generateDirectRouteWaypoints({ homeLocation, distance, direction })
-      updateState({ transitStops: waypoints, isLoading: false })
     }
 
-    if (homeLocation && !hasInitializedRef.current) {
-      hasInitializedRef.current = true
-      loadTransitStops()
-    }
-  }, [homeLocation, distance, direction, updateState, dbApiAvailable])
+    findCandidates()
+  }, [homeLocation, distance, direction, updateState])
 
-  // Calculate routes when transit stops are loaded
-  useEffect(() => {
-    console.log('[Routes] Calculate effect triggered - transitStops:', transitStops.length, 'calculatedRoutes:', calculatedRoutes.length, 'isCalculating:', isCalculatingRef.current)
+  // ============================================
+  // STEP 3: Calculate routes with adaptive tolerance
+  // ============================================
+  const calculateRoutes = useCallback(async (candidates, toleranceLevel) => {
+    if (isCalculatingRef.current) return
+    isCalculatingRef.current = true
+    setCalculatingRoutes(true)
+    setCurrentTolerance(toleranceLevel)
+    setSearchPhase(`Calculating routes (±${(toleranceLevel + 1) * 10}% tolerance)...`)
 
-    if (transitStops.length === 0 || calculatedRoutes.length > 0 || isCalculatingRef.current) {
-      console.log('[Routes] Skipping route calculation')
-      return
-    }
+    const { min: minDistance, max: maxDistance, tolerance } = getDistanceTolerance(distance, toleranceLevel)
+    console.log('[Algorithm] Tolerance level', toleranceLevel, '- range:', minDistance, '-', maxDistance, 'm')
 
-    const calculateInitialRoutes = async () => {
-      if (isCalculatingRef.current) return
-      isCalculatingRef.current = true
-      setCalculatingRoutes(true)
-      setSelectedRouteIndex(null)
-      setSearchPhase('Calculating routes...')
+    const validRoutes = [...calculatedRoutes]
+    let attempts = 0
 
-      const { min: minDistance, max: maxDistance } = getDistanceTolerance(distance)
-      console.log('[Routes] Distance tolerance:', minDistance, '-', maxDistance, 'm for target', distance, 'km')
+    for (const candidate of candidates) {
+      // Stop if we have enough routes
+      if (validRoutes.length >= ROUTES_TARGET) break
+      // Stop if we've tried too many
+      if (attempts >= MAX_CANDIDATES_PER_PASS) break
+      // Skip already checked candidates
+      if (checkedCandidatesRef.current.has(candidate.id)) continue
 
-      const validRoutes = []
-      let attempts = 0
-      const maxAttempts = Math.min(transitStops.length, 30)
+      attempts++
+      checkedCandidatesRef.current.add(candidate.id)
+      setSearchPhase(`Checking ${candidate.name}...`)
 
-      for (const stop of transitStops) {
-        if (validRoutes.length >= ROUTES_PER_PAGE) break
-        if (attempts >= maxAttempts) break
-        if (searchedStopsRef.current.has(stop.id)) continue
+      try {
+        const route = await calculateRoute({
+          startLat: candidate.lat,
+          startLng: candidate.lng,
+          endLat: homeLocation.lat,
+          endLng: homeLocation.lng,
+          profile: activity === 'run' ? 'foot' : 'bike',
+        })
 
-        attempts++
-        searchedStopsRef.current.add(stop.id)
-        setSearchPhase(`Checking ${stop.name}...`)
+        const isValid = route.distance >= minDistance && route.distance <= maxDistance
+        console.log('[Algorithm] Route to', candidate.name, '-', route.distance, 'm, valid:', isValid)
 
-        try {
-          const route = await calculateRoute({
-            startLat: stop.lat,
-            startLng: stop.lng,
-            endLat: homeLocation.lat,
-            endLng: homeLocation.lng,
-            profile: activity === 'run' ? 'foot' : 'bike',
+        if (isValid) {
+          validRoutes.push({
+            stop: candidate,
+            route,
+            color: ROUTE_COLORS[validRoutes.length % ROUTE_COLORS.length],
+            transitJourney: null, // Lazy loaded when selected
+            noTransitInfo: true, // Will be updated when transit is fetched
           })
-
-          console.log('[Routes] Route for', stop.name, '- distance:', route.distance, 'm, valid:', route.distance >= minDistance && route.distance <= maxDistance)
-
-          if (route.distance >= minDistance && route.distance <= maxDistance) {
-            let transitJourney = null
-
-            if (!noTransitMode && !stop.isWaypoint) {
-              setSearchPhase(`Finding transit to ${stop.name}...`)
-              try {
-                const journeyResult = await findJourneys({
-                  from: { latitude: homeLocation.lat, longitude: homeLocation.lng, address: homeLocation.displayName || 'Home' },
-                  to: stop.id,
-                  departure: new Date(departureTime),
-                  results: 1,
-                })
-                if (journeyResult.journeys?.length > 0) {
-                  transitJourney = journeyResult.journeys[0]
-                }
-              } catch (journeyErr) {
-                console.warn('Failed to fetch journey:', journeyErr)
-              }
-            }
-
-            validRoutes.push({
-              stop,
-              route,
-              color: ROUTE_COLORS[validRoutes.length % ROUTE_COLORS.length],
-              transitJourney,
-              noTransitInfo: noTransitMode || stop.isWaypoint || stop.isOSMFallback,
-            })
-            console.log('[Routes] Added route to', stop.name, '- distance:', route.distance, 'm, total:', validRoutes.length)
-            setCalculatedRoutes([...validRoutes])
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 150))
-        } catch (err) {
-          console.error(`Failed to calculate route for stop ${stop.id}:`, err)
+          setCalculatedRoutes([...validRoutes])
         }
-      }
 
-      setCalculatingRoutes(false)
-      setSearchPhase('')
-      isCalculatingRef.current = false
+        // Rate limit API calls
+        await new Promise(resolve => setTimeout(resolve, API_DELAY_MS))
+      } catch (err) {
+        console.error('[Algorithm] Route calculation failed for', candidate.name, err)
+      }
     }
 
-    calculateInitialRoutes()
-  }, [transitStops])
+    setCalculatingRoutes(false)
+    setSearchPhase('')
+    isCalculatingRef.current = false
 
+    // If we don't have enough routes and can relax tolerance, try again
+    if (validRoutes.length < ROUTES_TARGET && toleranceLevel < TOLERANCE_LEVELS.length - 1) {
+      console.log('[Algorithm] Not enough routes, relaxing tolerance...')
+      // Small delay before retrying with looser tolerance
+      setTimeout(() => {
+        calculateRoutes(candidates, toleranceLevel + 1)
+      }, 100)
+    } else if (validRoutes.length === 0) {
+      updateState({ error: 'No suitable routes found. Try adjusting your distance or direction.' })
+    }
+  }, [calculatedRoutes, distance, homeLocation, activity, updateState])
+
+  // ============================================
+  // STEP 5b: Lazy load transit directions when route selected
+  // ============================================
+  const fetchTransitForRoute = useCallback(async (routeIndex) => {
+    if (!dbApiAvailable) return
+
+    const route = calculatedRoutes[routeIndex]
+    if (!route || route.transitJourney !== null) return // Already fetched or has data
+
+    try {
+      console.log('[Transit] Fetching directions to', route.stop.name)
+      const journeyResult = await findJourneys({
+        from: {
+          latitude: homeLocation.lat,
+          longitude: homeLocation.lng,
+          address: homeLocation.displayName || 'Home'
+        },
+        to: {
+          latitude: route.stop.lat,
+          longitude: route.stop.lng,
+          name: route.stop.name
+        },
+        departure: new Date(departureTime),
+        results: 1,
+      })
+
+      if (journeyResult.journeys?.length > 0) {
+        const updatedRoutes = [...calculatedRoutes]
+        updatedRoutes[routeIndex] = {
+          ...updatedRoutes[routeIndex],
+          transitJourney: journeyResult.journeys[0],
+          noTransitInfo: false,
+        }
+        setCalculatedRoutes(updatedRoutes)
+      }
+    } catch (err) {
+      console.warn('[Transit] Failed to fetch directions:', err)
+      // Silently fail - transit directions are optional
+    }
+  }, [calculatedRoutes, homeLocation, departureTime, dbApiAvailable])
+
+  // ============================================
+  // Event Handlers
+  // ============================================
   const handleRouteClick = useCallback((index) => {
     setSelectedRouteIndex(prev => prev === index ? null : index)
-    if (selectedRouteIndex === index) setHoveredPoint(null)
-  }, [selectedRouteIndex])
+    if (selectedRouteIndex === index) {
+      setHoveredPoint(null)
+    } else {
+      // Lazy load transit when route is selected
+      fetchTransitForRoute(index)
+    }
+  }, [selectedRouteIndex, fetchTransitForRoute])
 
   const handleDownloadGPX = useCallback(async (e, item) => {
     e.stopPropagation()
@@ -530,73 +507,11 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
 
   const handleGenerateMore = useCallback(async () => {
     if (calculatingRoutes || isCalculatingRef.current) return
-    isCalculatingRef.current = true
-    setCalculatingRoutes(true)
-    setSearchPhase('Finding more routes...')
+    // Continue calculating with remaining candidates at current tolerance
+    calculateRoutes(candidatesRef.current, currentTolerance)
+  }, [calculatingRoutes, calculateRoutes, currentTolerance])
 
-    const { min: minDistance, max: maxDistance } = getDistanceTolerance(distance)
-    const newRoutes = [...calculatedRoutes]
-    let attempts = 0
-    const maxAttempts = 20
-
-    for (const stop of transitStops) {
-      if (newRoutes.length >= calculatedRoutes.length + ROUTES_PER_PAGE) break
-      if (attempts >= maxAttempts) break
-      if (searchedStopsRef.current.has(stop.id)) continue
-
-      attempts++
-      searchedStopsRef.current.add(stop.id)
-      setSearchPhase(`Checking ${stop.name}...`)
-
-      try {
-        const route = await calculateRoute({
-          startLat: stop.lat,
-          startLng: stop.lng,
-          endLat: homeLocation.lat,
-          endLng: homeLocation.lng,
-          profile: activity === 'run' ? 'foot' : 'bike',
-        })
-
-        if (route.distance >= minDistance && route.distance <= maxDistance) {
-          let transitJourney = null
-          if (!noTransitMode && !stop.isWaypoint) {
-            try {
-              const journeyResult = await findJourneys({
-                from: { latitude: homeLocation.lat, longitude: homeLocation.lng, address: homeLocation.displayName || 'Home' },
-                to: stop.id,
-                departure: new Date(departureTime),
-                results: 1,
-              })
-              if (journeyResult.journeys?.length > 0) {
-                transitJourney = journeyResult.journeys[0]
-              }
-            } catch (err) {
-              console.warn('Failed to fetch journey:', err)
-            }
-          }
-
-          newRoutes.push({
-            stop,
-            route,
-            color: ROUTE_COLORS[newRoutes.length % ROUTE_COLORS.length],
-            transitJourney,
-            noTransitInfo: noTransitMode || stop.isWaypoint,
-          })
-          setCalculatedRoutes([...newRoutes])
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 150))
-      } catch (err) {
-        console.error(`Failed to calculate route:`, err)
-      }
-    }
-
-    setCalculatingRoutes(false)
-    setSearchPhase('')
-    isCalculatingRef.current = false
-  }, [calculatingRoutes, calculatedRoutes, transitStops, distance, homeLocation, activity, departureTime, noTransitMode])
-
-  const hasMoreRoutes = transitStops.some(s => !searchedStopsRef.current.has(s.id))
+  const hasMoreCandidates = candidatesRef.current.some(c => !checkedCandidatesRef.current.has(c.id))
   const selectedItem = selectedRouteIndex !== null ? calculatedRoutes[selectedRouteIndex] : null
 
   // Loading state - show when loading or when still calculating initial routes
@@ -675,7 +590,6 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           selectedRouteIndex={selectedRouteIndex}
           hoveredPoint={hoveredPoint}
           onRouteClick={handleRouteClick}
-          darkMode={darkMode}
           className="absolute inset-0"
         />
 
@@ -684,16 +598,6 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           className={`absolute top-4 right-4 bottom-4 flex-col gap-3 z-10 hidden md:flex transition-opacity duration-200 ${selectedRouteIndex !== null ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           style={{ width: '35%', minWidth: '320px', maxWidth: '480px' }}
         >
-          {/* Notice when transit API is unavailable */}
-          {noTransitMode && (
-            <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs backdrop-blur-md">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                Transit info unavailable
-              </div>
-            </div>
-          )}
-
           {/* Route summary */}
           <div className="text-xs text-slate-400 bg-slate-900/70 backdrop-blur-md rounded-lg px-3 py-2">
             {calculatingRoutes ? (
@@ -702,7 +606,10 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
                 {searchPhase || 'Searching...'}
               </span>
             ) : (
-              <span>{calculatedRoutes.length} routes found</span>
+              <span>
+                {calculatedRoutes.length} route{calculatedRoutes.length !== 1 ? 's' : ''} found
+                {currentTolerance > 0 && ` (±${(currentTolerance + 1) * 10}% tolerance)`}
+              </span>
             )}
           </div>
 
@@ -719,14 +626,14 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
             ))}
 
             {/* Generate more button */}
-            {hasMoreRoutes && !calculatingRoutes && (
+            {hasMoreCandidates && !calculatingRoutes && calculatedRoutes.length < ROUTES_TARGET && (
               <button
                 onClick={handleGenerateMore}
                 className="w-full p-3 rounded-xl bg-slate-800/60 backdrop-blur-md border border-slate-600/50
                            text-slate-300 text-sm hover:bg-slate-800/80 transition-colors flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                More Routes
+                Find More Routes
               </button>
             )}
           </div>
@@ -735,7 +642,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
         {/* Mobile Bottom Sheet (simplified for now) */}
         <div className="absolute bottom-0 left-0 right-0 md:hidden bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50 z-10">
           <div className="p-3 space-y-2 max-h-48 overflow-y-auto">
-            {calculatedRoutes.slice(0, 3).map((item, index) => (
+            {calculatedRoutes.slice(0, 5).map((item, index) => (
               <RouteCardMini
                 key={item.stop.id}
                 item={item}
