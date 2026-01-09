@@ -39,7 +39,7 @@ function StatBox({ icon, label, value }) {
   )
 }
 
-export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownloadGPX, activity, pace, onPaceChange }) {
+export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownloadGPX, activity, pace, onPaceChange, showTransitOnMap = false, onToggleShowTransit }) {
   const distanceKm = item.route.distance / 1000
   const duration = calculateDuration(distanceKm, pace)
   const calories = calculateCalories(distanceKm, 0, activity)
@@ -68,7 +68,16 @@ export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownlo
           <X className="w-5 h-5" />
         </button>
         <h2 className="font-semibold text-white">Route Details</h2>
-        <div className="w-9" />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onToggleShowTransit?.()}
+            className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${showTransitOnMap ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700/50'}`}
+            aria-pressed={showTransitOnMap}
+            aria-label={showTransitOnMap ? 'Hide transit on map' : 'Show transit on map'}
+          >
+            {showTransitOnMap ? 'Transit on map' : 'Show transit'}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

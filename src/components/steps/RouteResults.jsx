@@ -328,7 +328,39 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   }, [calculatingRoutes, calculateRoutes, currentTolerance])
 
   const hasMoreCandidates = candidatesRef.current.some(c => !checkedCandidatesRef.current.has(c.id))
+  const [showTransitOnMap, setShowTransitOnMap] = useState(false)
+
   const selectedItem = selectedRouteIndex !== null ? calculatedRoutes[selectedRouteIndex] : null
+
+  // Compute transit overlay GeoJSON for selected route when requested
+  const transitOverlay = (function() {
+    if (!selectedItem || !showTransitOnMap || !selectedItem.transitJourney) return null
+
+    const coords = []
+    // Use leg origin/destination locations if available
+    selectedItem.transitJourney.legs.forEach((leg) => {
+      const originLoc = leg.origin?.location
+      const destLoc = leg.destination?.location
+      if (originLoc && typeof originLoc.latitude === 'number' && typeof originLoc.longitude === 'number') {
+        coords.push([originLoc.longitude, originLoc.latitude])
+      }
+      if (destLoc && typeof destLoc.latitude === 'number' && typeof destLoc.longitude === 'number') {
+        coords.push([destLoc.longitude, destLoc.latitude])
+      }
+    })
+
+    if (coords.length < 2) return null
+
+    return {
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: coords,
+      },
+      properties: {},
+    }
+  })()
+
 
   // Loading state - show when loading or when still calculating initial routes
   if (isLoading || (calculatingRoutes && calculatedRoutes.length === 0)) {
@@ -407,6 +439,8 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           hoveredPoint={hoveredPoint}
           onRouteClick={handleRouteClick}
           className="absolute inset-0"
+          transitOverlay={transitOverlay}
+          transitColor={selectedItem?.color}
         />
 
         {/* Floating Route Cards (Desktop) - hide when detail panel is open */}
@@ -475,12 +509,14 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           <div className="absolute top-0 right-0 bottom-0 w-full z-20 animate-slide-in-right" style={{ width: 'min(100%, max(35%, 400px))' }}>
             <RouteDetailPanel
               item={selectedItem}
-              onClose={() => setSelectedRouteIndex(null)}
+              onClose={() => { setSelectedRouteIndex(null); setShowTransitOnMap(false) }}
               onHoverPoint={setHoveredPoint}
               onDownloadGPX={handleDownloadGPX}
               activity={activity}
               pace={pace}
               onPaceChange={setPace}
+              showTransitOnMap={showTransitOnMap}
+              onToggleShowTransit={() => setShowTransitOnMap(s => !s)}
             />
           </div>
         )}

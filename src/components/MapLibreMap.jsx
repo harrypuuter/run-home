@@ -19,6 +19,9 @@ function MapLibreMap({
   onClick,
   className = 'h-64 w-full',
   darkMode = false,
+  // Transit overlay: GeoJSON feature (LineString) to show transit journey
+  transitOverlay = null,
+  transitColor = '#3b82f6',
 }) {
   const mapContainer = useRef(null)
   const map = useRef(null)
@@ -371,6 +374,76 @@ function MapLibreMap({
       .setLngLat([hoveredPoint.lng, hoveredPoint.lat])
       .addTo(map.current)
   }, [hoveredPoint, selectedRouteIndex, routes, mapLoaded])
+
+  // Transit overlay: dashed line to show transit journey when requested
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !styleLoaded) return
+
+    const sourceId = 'transit-overlay'
+    const lineId = `${sourceId}-line`
+    const glowId = `${sourceId}-glow`
+
+    // Remove existing transit layers/sources
+    try {
+      if (map.current.getLayer(glowId)) map.current.removeLayer(glowId)
+      if (map.current.getLayer(lineId)) map.current.removeLayer(lineId)
+      if (map.current.getSource(sourceId)) map.current.removeSource(sourceId)
+    } catch (e) {
+      // ignore errors when style changes
+    }
+
+    if (!transitOverlay || !transitOverlay.geometry || !transitOverlay.geometry.coordinates) return
+
+    try {
+      map.current.addSource(sourceId, { type: 'geojson', data: transitOverlay })
+
+      // Glow layer
+      map.current.addLayer({
+        id: glowId,
+        type: 'line',
+        source: sourceId,
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
+        paint: {
+          'line-color': transitColor || '#3b82f6',
+          'line-width': 10,
+          'line-opacity': 0.15,
+          'line-blur': 4,
+        },
+      })
+
+      // Dashed transit line
+      map.current.addLayer({
+        id: lineId,
+        type: 'line',
+        source: sourceId,
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
+        paint: {
+          'line-color': transitColor || '#3b82f6',
+          'line-width': 3,
+          'line-opacity': 0.95,
+          'line-dasharray': [2, 2],
+        },
+      })
+    } catch (err) {
+      console.error('Failed to add transit overlay:', err)
+    }
+
+    return () => {
+      try {
+        if (map.current.getLayer(glowId)) map.current.removeLayer(glowId)
+        if (map.current.getLayer(lineId)) map.current.removeLayer(lineId)
+        if (map.current.getSource(sourceId)) map.current.removeSource(sourceId)
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [transitOverlay, transitColor, mapLoaded, styleLoaded])
 
   // Update center when marker changes (for initial positioning)
   useEffect(() => {
