@@ -10,6 +10,86 @@
 
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/elevation'
 
+// In-memory cache for elevation points keyed by quantized lat,lng
+const elevationCache = new Map()
+// Load cache from localStorage if available to persist between reloads
+try {
+  const raw = localStorage.getItem('elevationCache')
+  if (raw) {
+    const parsed = JSON.parse(raw)
+    for (const k of Object.keys(parsed)) {
+      elevationCache.set(k, parsed[k])
+    }
+  }
+} catch (err) {
+  // ignore localStorage problems
+}
+
+function persistCache() {
+  try {
+    const obj = Object.fromEntries(elevationCache)
+    localStorage.setItem('elevationCache', JSON.stringify(obj))
+  } catch (err) {
+    // ignore
+  }
+}
+
+function cacheKey(lat, lng, precision = 4) {
+  // Quantize to ~11m at equator when precision=4
+  return `${lat.toFixed(precision)},${lng.toFixed(precision)}`
+}
+
+/**
+ * Resample coordinates so points are equally spaced along the path.
+ * This prevents uneven sampling that causes smoothing artifacts.
+ * @param {Array} coords - Array of [lng, lat]
+ * @param {number} targetPoints - desired number of points (approx)
+ * @returns {Array} - Array of { lat, lng, distance }
+ */
+function resampleAlongDistance(coords, targetPoints = 100) {
+  if (!coords || coords.length === 0) return []
+
+  // Build cumulative distances at each vertex
+  const cumDist = [0]
+  for (let i = 1; i < coords.length; i++) {
+    const [lng0, lat0] = coords[i - 1]
+    const [lng1, lat1] = coords[i]
+    cumDist.push(cumDist[cumDist.length - 1] + haversineDistance(lat0, lng0, lat1, lng1))
+  }
+
+  const total = cumDist[cumDist.length - 1]
+  if (total === 0) {
+    // Degenerate path, return first point
+    const [lng, lat] = coords[0]
+    return [{ lat, lng, distance: 0 }]
+  }
+
+  const spacing = total / (Math.max(2, targetPoints) - 1)
+  const out = []
+
+  for (let i = 0; i < targetPoints; i++) {
+    const d = Math.min(total, i * spacing)
+    // find segment where d lies
+    let idx = 0
+    while (idx < cumDist.length - 1 && cumDist[idx + 1] < d) idx++
+
+    const segStart = cumDist[idx]
+    const segEnd = cumDist[idx + 1] || segStart
+    const t = segEnd === segStart ? 0 : (d - segStart) / (segEnd - segStart)
+
+    const [lng0, lat0] = coords[idx]
+    const [lng1, lat1] = coords[Math.min(idx + 1, coords.length - 1)]
+
+    // Linear interpolation in lat/lng space is acceptable for short segments
+    const lat = lat0 + (lat1 - lat0) * t
+    const lng = lng0 + (lng1 - lng0) * t
+
+    out.push({ lat, lng, distance: d })
+  }
+
+  return out
+}
+
 /**
  * Fetch elevation data for a list of coordinates
  * @param {Array} coordinates - Array of [lng, lat] pairs (GeoJSON format)
@@ -21,87 +101,89 @@ export async function fetchElevationProfile(coordinates) {
     return []
   }
 
-  // Sample coordinates - aim for ~100 points for better resolution
-  // Open-Meteo allows 50 points per request, so we'll batch if needed
+  // Resample along distance to get roughly equally spaced points
   const targetPoints = 100
-  const step = Math.max(1, Math.floor(coordinates.length / targetPoints))
-  const sampledCoords = []
+  const sampled = resampleAlongDistance(coordinates, targetPoints)
 
-  // Always include first and last point
-  for (let i = 0; i < coordinates.length; i += step) {
-    sampledCoords.push(coordinates[i])
-  }
-  // Ensure last point is included
-  if (sampledCoords[sampledCoords.length - 1] !== coordinates[coordinates.length - 1]) {
-    sampledCoords.push(coordinates[coordinates.length - 1])
-  }
-
-  console.log('[Elevation] Fetching elevation for', sampledCoords.length, 'points from', coordinates.length, 'total')
+  console.log('[Elevation] Resampled to', sampled.length, 'equally spaced points from', coordinates.length, 'vertices')
 
   try {
-    // Open-Meteo has a limit of ~50 points per request, so batch if needed
+    // Check cache first and prepare batches for missing points
+    const batchCoordsToFetch = []
+    const finalProfile = sampled.map(p => ({ lat: p.lat, lng: p.lng, elevation: null, distance: p.distance }))
+
+    // Determine which points we need to fetch
+    const missingIndices = []
+    for (let i = 0; i < sampled.length; i++) {
+      const p = sampled[i]
+      const key = cacheKey(p.lat, p.lng)
+      if (elevationCache.has(key)) {
+        finalProfile[i].elevation = elevationCache.get(key)
+      } else {
+        missingIndices.push(i)
+      }
+    }
+
+    // Batch fetch missing points (Open-Meteo accepts comma-separated lat/lon lists)
     const batchSize = 50
-    const allElevations = []
-
-    for (let i = 0; i < sampledCoords.length; i += batchSize) {
-      const batch = sampledCoords.slice(i, i + batchSize)
-      const latitudes = batch.map(c => c[1].toFixed(6)).join(',')
-      const longitudes = batch.map(c => c[0].toFixed(6)).join(',')
-
+    for (let bi = 0; bi < missingIndices.length; bi += batchSize) {
+      const batchIdx = missingIndices.slice(bi, bi + batchSize)
+      const latitudes = batchIdx.map(i => sampled[i].lat.toFixed(6)).join(',')
+      const longitudes = batchIdx.map(i => sampled[i].lng.toFixed(6)).join(',')
       const url = `${OPEN_METEO_URL}?latitude=${latitudes}&longitude=${longitudes}`
-      console.log('[Elevation] Fetching batch', Math.floor(i / batchSize) + 1, 'of', Math.ceil(sampledCoords.length / batchSize))
+
+      console.log('[Elevation] Fetching batch', Math.floor(bi / batchSize) + 1, 'of', Math.ceil(missingIndices.length / batchSize))
 
       const response = await fetch(url)
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
 
       const data = await response.json()
+      if (!data.elevation || !Array.isArray(data.elevation)) throw new Error('Invalid response format')
 
-      if (!data.elevation || !Array.isArray(data.elevation)) {
-        throw new Error('Invalid response format')
+      // Apply returned elevations to the corresponding indices and cache them
+      for (let j = 0; j < batchIdx.length; j++) {
+        const idx = batchIdx[j]
+        const elevation = data.elevation[j]
+        finalProfile[idx].elevation = typeof elevation === 'number' && !isNaN(elevation) ? elevation : null
+        const key = cacheKey(sampled[idx].lat, sampled[idx].lng)
+        if (finalProfile[idx].elevation !== null) {
+          elevationCache.set(key, finalProfile[idx].elevation)
+        }
       }
 
-      allElevations.push(...data.elevation)
+      // Persist cache periodically
+      persistCache()
     }
 
-    console.log('[Elevation] Response received, elevations:', allElevations.length)
+    const validCount = finalProfile.filter(p => p.elevation !== null).length
+    console.log('[Elevation] Got', finalProfile.length, 'points,', validCount, 'with valid elevation')
 
-    // Build profile with cumulative distance
-    let cumulativeDistance = 0
-    const profile = []
+    // Apply smoothing to reduce spikes. Use a two-pass approach and a larger minimum window
+    const totalDistance = finalProfile.length > 0 ? finalProfile[finalProfile.length - 1].distance : 0
+    // Aim to smooth over at least ~200m (to compensate for meter-quantized API values) or a small
+    // percentage of total route length (3%), whichever is larger.
+    const windowMeters = Math.max(200, Math.floor(totalDistance * 0.03))
+    const spacing = finalProfile.length > 1 ? (totalDistance / (finalProfile.length - 1)) : 1
 
-    for (let i = 0; i < sampledCoords.length; i++) {
-      const [lng, lat] = sampledCoords[i]
-      const elevation = allElevations[i]
+    let windowSize = Math.max(3, Math.round(windowMeters / Math.max(1, spacing)))
+    if (windowSize % 2 === 0) windowSize += 1 // make it odd for symmetry
+    // Cap window size reasonably to not exceed profile length
+    windowSize = Math.min(windowSize, Math.max(3, finalProfile.length - (finalProfile.length % 2 === 0 ? 1 : 0)))
 
-      // Calculate distance from previous point
-      if (i > 0) {
-        const [prevLng, prevLat] = sampledCoords[i - 1]
-        cumulativeDistance += haversineDistance(prevLat, prevLng, lat, lng)
-      }
+    // First pass: stronger smoothing
+    const firstPass = smoothElevationProfile(finalProfile, windowSize)
+    // Second pass: light smoothing to reduce remaining stair-steps (smaller window)
+    const lightWindow = Math.max(3, Math.round(windowSize / 3))
+    const smoothedProfile = smoothElevationProfile(firstPass, lightWindow % 2 === 1 ? lightWindow : lightWindow + 1)
 
-      profile.push({
-        lat,
-        lng,
-        elevation: typeof elevation === 'number' && !isNaN(elevation) ? elevation : null,
-        distance: cumulativeDistance,
-      })
-    }
-
-    const validCount = profile.filter(p => p.elevation !== null).length
-    console.log('[Elevation] Got', profile.length, 'points,', validCount, 'with valid elevation')
-
-    // Apply smoothing to reduce spikes
-    const smoothedProfile = smoothElevationProfile(profile)
-    console.log('[Elevation] Applied smoothing to profile')
+    console.log('[Elevation] Applied two-pass smoothing to profile (window sizes:', windowSize, ',', lightWindow, ')')
 
     return smoothedProfile
 
   } catch (err) {
     console.error('[Elevation] Open-Meteo failed:', err.message)
-    return generateFallbackProfile(sampledCoords)
+    // Convert sampled into fallback shape
+    return generateFallbackProfile(sampled.map(p => [p.lng, p.lat]))
   }
 }
 

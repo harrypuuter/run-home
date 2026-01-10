@@ -15,6 +15,10 @@ export default function MobileBottomSheet({
   onDownloadGPX,
   onHoverPoint,
   dbApiAvailable,
+  // Mobile extras
+  hasMoreCandidates = false,
+  calculatingRoutes = false,
+  onGenerateMore = null,
 }) {
   const sheetRef = useRef(null)
   const startYRef = useRef(0)
@@ -46,20 +50,30 @@ export default function MobileBottomSheet({
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Touch / mouse handlers
+  // Dragging refs
+  const handleRef = useRef(null)
+  const pointerIdRef = useRef(null)
+  const draggingRef = useRef(false)
+
+  // Start drag
   const startDrag = useCallback((clientY) => {
     startYRef.current = clientY
     startTranslateRef.current = translateY
+    draggingRef.current = true
     document.body.style.userSelect = 'none'
   }, [translateY])
 
   const onMove = useCallback((clientY) => {
+    if (!draggingRef.current) return
     const dy = clientY - startYRef.current
     const next = Math.max(0, Math.min(sheetStates.current.peek, startTranslateRef.current + dy))
     setTranslateY(next)
   }, [])
 
   const endDrag = useCallback(() => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    pointerIdRef.current = null
     document.body.style.userSelect = ''
     // Snap to closest state
     const distances = [
@@ -79,32 +93,47 @@ export default function MobileBottomSheet({
     }
   }, [translateY, onClose])
 
-  // Pointer handlers
+  // Pointer handlers (global listeners for robustness)
   useEffect(() => {
-    const onTouchMove = (e) => {
-      onMove(e.touches[0].clientY)
+    const onPointerMove = (e) => {
+      if (!draggingRef.current) return
+      onMove(e.clientY)
     }
-    const onTouchEnd = () => endDrag()
+    const onPointerUp = (e) => {
+      if (!draggingRef.current) return
+      try {
+        if (handleRef.current && handleRef.current.releasePointerCapture && pointerIdRef.current != null) {
+          handleRef.current.releasePointerCapture(pointerIdRef.current)
+        }
+      } catch (err) {
+        // ignore
+      }
+      endDrag()
+    }
+    const onPointerCancel = (e) => onPointerUp(e)
 
-    const onMouseMove = (e) => onMove(e.clientY)
-    const onMouseUp = () => endDrag()
-
-    window.addEventListener('touchmove', onTouchMove)
-    window.addEventListener('touchend', onTouchEnd)
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerCancel)
 
     return () => {
-      window.removeEventListener('touchmove', onTouchMove)
-      window.removeEventListener('touchend', onTouchEnd)
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerCancel)
     }
   }, [onMove, endDrag])
 
   const onPointerDown = (e) => {
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY
-    startDrag(clientY)
+    // Only primary button for mouse
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    pointerIdRef.current = e.pointerId
+    startDrag(e.clientY)
+    // Capture to ensure we receive pointer events even if pointer moves outside
+    try {
+      if (handleRef.current && handleRef.current.setPointerCapture) handleRef.current.setPointerCapture(e.pointerId)
+    } catch (err) {
+      // ignore
+    }
   }
 
   const sheetStyle = {
@@ -126,9 +155,10 @@ export default function MobileBottomSheet({
       >
         {/* Handle */}
         <div
-          className="w-full py-2 flex items-center justify-center cursor-grab"
-          onMouseDown={onPointerDown}
-          onTouchStart={onPointerDown}
+          ref={handleRef}
+          className="w-full py-2 flex items-center justify-center cursor-grab touch-none"
+          onPointerDown={onPointerDown}
+          style={{ touchAction: 'none' }}
         >
           <div className="w-12 h-1.5 bg-slate-700 rounded-full" />
         </div>

@@ -17,8 +17,20 @@ function Router() {
   return <App />
 }
 
+import ErrorBoundary from './components/ErrorBoundary'
+
+// Global handlers to surface uncaught errors/rejections (helps with white-screen debugging)
+window.addEventListener('error', (ev) => {
+  console.error('[GlobalError] unhandled error:', ev.error || ev.message || ev)
+})
+window.addEventListener('unhandledrejection', (ev) => {
+  console.error('[GlobalError] unhandled rejection:', ev.reason || ev)
+})
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Router />
+    <ErrorBoundary>
+      <Router />
+    </ErrorBoundary>
   </StrictMode>,
 )
