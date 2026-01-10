@@ -34,6 +34,28 @@ Testing & workflows
 - E2E: Playwright tests live under `tests/e2e/`. Use the debug page to craft deterministic scenarios: `http://localhost:5173/run-home/debug` (see `src/pages/DebugMapLibre.jsx`) — tests often use this page to bypass the wizard.
   - Run tests locally: `npx playwright install --with-deps` then `npm run test:e2e` (or `npx playwright test`). CI uses Node 20; prefer Node 20 when running the Playwright job locally.
 
+CI & logs (how to access)
+- GitHub Actions UI: Go to the repository → Actions tab → select the workflow run → open the failing job → click the step to view logs (recommended for quick access).
+
+- CLI (GitHub CLI - `gh`):
+  - List recent runs for a branch: `gh run list --repo <owner>/<repo> --branch feature/maplibre-phase6`
+  - View a run and open logs in browser: `gh run view <run-id> --repo <owner>/<repo> --web`
+  - Show run metadata in JSON: `gh run view <run-id> --repo <owner>/<repo> --json statusCheckRollup,checkSuites`
+
+- API (curl):
+  - List runs on a branch:
+    `curl -s "https://api.github.com/repos/<owner>/<repo>/actions/runs?branch=<branch>" | jq '.workflow_runs[] | {id, name, status, conclusion, html_url}'`
+  - List jobs for a run:
+    `curl -s "https://api.github.com/repos/<owner>/<repo>/actions/runs/<run-id>/jobs" | jq '.jobs[] | {id, name, status, conclusion}'`
+  - Download run logs (admin rights required):
+    `curl -L -o logs.zip -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/<owner>/<repo>/actions/runs/<run-id>/logs"`
+  - List artifacts: `curl -s "https://api.github.com/repos/<owner>/<repo>/actions/runs/<run-id>/artifacts" | jq '.'`
+
+Notes:
+- Downloading logs or artifacts via the API may require repository admin access (you may see "Must have admin rights to Repository" if not permitted). If you hit this, use the web UI or ask an admin to download logs.
+- If tests fail due to viewport/layout (mobile vs desktop), make E2E tests explicitly set `page.setViewportSize(...)` or use a mobile device preset to avoid environment-dependent flakiness.
+- When reproducing CI failures locally, match the Node/npm versions used in CI (workflow uses Node 20) and run `npx playwright install --with-deps` before running tests to ensure browsers are available.
+
 What good tests look like here
 - E2E tests that exercise the debug page for deterministic behavior (see `tests/e2e/bottom-sheet.spec.js`).
 - When changing the algorithm (RouteResults): add an E2E test that uses `DebugMapLibre` to verify at least one successful route is produced for a known test location.
