@@ -4,6 +4,17 @@
 
 ---
 
+## Unreleased (January 10, 2026)
+
+### ✅ Recent fixes & improvements
+
+- **Elevation:** Implemented resampling to equally spaced points along routes, added in-memory + `localStorage` caching of elevation samples, and a two-pass Gaussian smoothing approach to eliminate meter-quantization steps from Open‑Meteo responses. (Resampling prevents smoothing artifacts and caching reduces API usage.)
+- **Mobile UX:** Fixed MobileBottomSheet drag release by switching to pointer events and using pointer capture/release for robust drag lifecycle handling.
+- **Stability:** Added a top-level `ErrorBoundary` and global error handlers to surface runtime exceptions (prevents white-screen failure mode).
+- **Debugging:** Improved Debug page reliability and made the "Find More Routes" control more robust for manual testing.
+
+---
+
 ## Version 0.4.0 (January 9, 2026) - Algorithm Rework & UI Polish
 
 ### 🔄 Algorithm Rework

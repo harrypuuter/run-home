@@ -3,6 +3,9 @@ import { Loader2, RotateCcw, Clock, Route, RefreshCw, MapPin, Navigation, Train,
 import Button from '../ui/Button'
 import MapLibreMap from '../MapLibreMap'
 import ElevationProfile from '../ElevationProfile'
+import RouteDetailPanel from './RouteDetailPanel'
+import TransitJourneyDetails from './TransitJourneyDetails'
+import MobileBottomSheet from '../../components/MobileBottomSheet'
 import { findJourneys, getStopIcon, getProductIcon, formatDelay, formatTime } from '../../services/deutschebahn'
 import { fetchOSMTransitStations } from '../../services/nominatim'
 import { calculateRoute } from '../../services/osrm'
@@ -91,194 +94,8 @@ const RouteCardMini = memo(function RouteCardMini({ item, index, isSelected, onS
   )
 })
 
-// ============================================
-// Detail Panel Component (Slide out)
-// ============================================
-function RouteDetailPanel({
-  item,
-  onClose,
-  onHoverPoint,
-  onDownloadGPX,
-  activity,
-  pace,
-  onPaceChange,
-}) {
-  const distanceKm = item.route.distance / 1000
-  const duration = calculateDuration(distanceKm, pace)
-  // Estimate calories based on distance only (elevation stats are in ElevationProfile)
-  const calories = calculateCalories(distanceKm, 0, activity)
 
-  // Calculate ETA
-  const departureTime = item.transitJourney?.legs?.[0]?.origin?.departure
-  let eta = null
-  const runDurationMs = distanceKm * pace * 60 * 1000 // ms
 
-  if (departureTime) {
-    // If we have transit info, use transit departure + transit duration + run duration
-    const depDate = new Date(departureTime)
-    const transitDuration = item.transitJourney?.duration || 0
-    eta = new Date(depDate.getTime() + transitDuration + runDurationMs)
-  } else {
-    // No transit info - just show ETA as now + run duration
-    eta = new Date(Date.now() + runDurationMs)
-  }
-
-  return (
-    <div className="h-full flex flex-col bg-slate-900/95 backdrop-blur-xl border-l border-slate-700/50">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-700/50">
-        <button
-          onClick={onClose}
-          className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
-        <h2 className="font-semibold text-white">Route Details</h2>
-        <div className="w-9" /> {/* Spacer for centering */}
-      </div>
-
-      {/* Content (scrollable) */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Station Header */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">{getStopIcon(item.stop.type)}</span>
-            <h3 className="text-lg font-semibold text-white">{item.stop.name}</h3>
-          </div>
-          {!item.noTransitInfo && item.transitJourney?.legs && (
-            <p className="text-sm text-slate-400">
-              {item.transitJourney.legs.filter(l => l.line).map(l => l.line.name).join(' → ')} • {departureTime && `Depart ${formatTime(departureTime)}`}
-            </p>
-          )}
-        </div>
-
-        {/* Pace Settings */}
-        <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-300">⚙️ Your Pace</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onPaceChange(Math.max(2, pace - 0.5))}
-                className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
-              >
-                -
-              </button>
-              <span className="text-white font-mono text-sm w-12 text-center">
-                {formatPace(pace)}
-              </span>
-              <button
-                onClick={() => onPaceChange(Math.min(10, pace + 0.5))}
-                className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
-              >
-                +
-              </button>
-              <span className="text-xs text-slate-500">min/km</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Route Statistics Grid - show distance, duration, calories, ETA */}
-        <div className="grid grid-cols-2 gap-2">
-          <StatBox icon={<Route className="w-4 h-4" />} label="Distance" value={formatDistance(item.route.distance)} />
-          <StatBox icon={<Clock className="w-4 h-4" />} label="Duration" value={duration} />
-          <StatBox icon={<Flame className="w-4 h-4" />} label="Calories" value={`~${calories} kcal`} />
-          <StatBox icon={<Flag className="w-4 h-4" />} label="ETA" value={eta ? eta.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '--:--'} />
-        </div>
-
-        {/* Elevation Profile - includes its own stats */}
-        <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-          <h4 className="text-sm font-medium text-slate-300 mb-2">📈 Elevation Profile</h4>
-          <ElevationProfile
-            key={`elevation-${item.stop.id}`}
-            route={item.route}
-            color={item.color}
-            onHoverPoint={onHoverPoint}
-            height={180}
-          />
-        </div>
-
-        {/* Transit Journey Details (if available) */}
-        {!item.noTransitInfo && item.transitJourney && (
-          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-            <h4 className="text-sm font-medium text-slate-300 mb-2">🚇 Getting There</h4>
-            <TransitJourneyDetails journey={item.transitJourney} />
-          </div>
-        )}
-
-        {/* Edit Route Placeholder */}
-        <button
-          disabled
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl
-                     bg-slate-800/30 border border-slate-700/50 text-slate-500 cursor-not-allowed"
-        >
-          <span>✏️</span>
-          Edit Route
-          <span className="text-xs bg-slate-700 px-2 py-0.5 rounded-full">Soon</span>
-        </button>
-      </div>
-
-      {/* Footer Actions */}
-      <div className="p-4 border-t border-slate-700/50 space-y-2">
-        <button
-          onClick={(e) => onDownloadGPX(e, item)}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl
-                     bg-gradient-to-r from-green-500 to-emerald-600
-                     text-white font-medium
-                     hover:from-green-600 hover:to-emerald-700
-                     transition-all duration-200 shadow-lg shadow-green-500/20"
-        >
-          <Download className="w-5 h-5" />
-          Download GPX
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// Stat box for the grid
-function StatBox({ icon, label, value }) {
-  return (
-    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/30">
-      <div className="flex items-center gap-1.5 text-slate-400 text-xs mb-0.5">
-        {icon}
-        {label}
-      </div>
-      <div className="text-white font-medium text-sm">{value}</div>
-    </div>
-  )
-}
-
-// Transit journey details
-function TransitJourneyDetails({ journey }) {
-  if (!journey?.legs) return null
-
-  return (
-    <div className="space-y-2">
-      {journey.legs.map((leg, i) => (
-        <div key={i} className="flex items-start gap-2 text-sm">
-          <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-            {leg.walking ? '🚶' : getProductIcon(leg.line?.product)}
-          </div>
-          <div className="flex-1 min-w-0">
-            {leg.walking ? (
-              <span className="text-slate-400">Walk {leg.distance ? `${Math.round(leg.distance)}m` : ''}</span>
-            ) : (
-              <>
-                <span className="text-white font-medium">{leg.line?.name}</span>
-                {leg.line?.direction && (
-                  <span className="text-slate-400"> → {leg.line.direction}</span>
-                )}
-                {leg.origin?.departure && (
-                  <span className="text-slate-500 text-xs ml-2">{formatTime(leg.origin.departure)}</span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 // ============================================
 // Main RouteResults Component
@@ -483,14 +300,22 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   // Event Handlers
   // ============================================
   const handleRouteClick = useCallback((index) => {
-    setSelectedRouteIndex(prev => prev === index ? null : index)
-    if (selectedRouteIndex === index) {
-      setHoveredPoint(null)
-    } else {
-      // Lazy load transit when route is selected
-      fetchTransitForRoute(index)
-    }
-  }, [selectedRouteIndex, fetchTransitForRoute])
+    // Compute the next selected index deterministically and act on it immediately
+    setSelectedRouteIndex(prev => {
+      const next = prev === index ? null : index
+
+      if (next === null) {
+        // Panel closing - clear hover and transit overlay
+        setHoveredPoint(null)
+        setShowTransitOnMap(false)
+      } else {
+        // Panel opening - lazy load transit
+        fetchTransitForRoute(next)
+      }
+
+      return next
+    })
+  }, [fetchTransitForRoute])
 
   const handleDownloadGPX = useCallback(async (e, item) => {
     e.stopPropagation()
@@ -506,13 +331,55 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   }, [homeLocation, activity])
 
   const handleGenerateMore = useCallback(async () => {
+    console.log('[RouteResults] Find More clicked - calculatingRoutes:', calculatingRoutes, 'candidates left:', candidatesRef.current.length)
     if (calculatingRoutes || isCalculatingRef.current) return
     // Continue calculating with remaining candidates at current tolerance
     calculateRoutes(candidatesRef.current, currentTolerance)
   }, [calculatingRoutes, calculateRoutes, currentTolerance])
 
   const hasMoreCandidates = candidatesRef.current.some(c => !checkedCandidatesRef.current.has(c.id))
+  const [showTransitOnMap, setShowTransitOnMap] = useState(false)
+
+  // Ensure overlay is cleared if the DB API becomes unavailable
+  useEffect(() => {
+    if (!dbApiAvailable && showTransitOnMap) {
+      setShowTransitOnMap(false)
+    }
+  }, [dbApiAvailable, showTransitOnMap])
+
   const selectedItem = selectedRouteIndex !== null ? calculatedRoutes[selectedRouteIndex] : null
+
+  // Compute transit overlay GeoJSON for selected route when requested
+  const transitOverlay = (function() {
+    // Only provide overlay if DB API is available and user requested it
+    if (!dbApiAvailable) return null
+    if (!selectedItem || !showTransitOnMap || !selectedItem.transitJourney) return null
+
+    const coords = []
+    // Use leg origin/destination locations if available
+    selectedItem.transitJourney.legs.forEach((leg) => {
+      const originLoc = leg.origin?.location
+      const destLoc = leg.destination?.location
+      if (originLoc && typeof originLoc.latitude === 'number' && typeof originLoc.longitude === 'number') {
+        coords.push([originLoc.longitude, originLoc.latitude])
+      }
+      if (destLoc && typeof destLoc.latitude === 'number' && typeof destLoc.longitude === 'number') {
+        coords.push([destLoc.longitude, destLoc.latitude])
+      }
+    })
+
+    if (coords.length < 2) return null
+
+    return {
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: coords,
+      },
+      properties: {},
+    }
+  })()
+
 
   // Loading state - show when loading or when still calculating initial routes
   if (isLoading || (calculatingRoutes && calculatedRoutes.length === 0)) {
@@ -591,6 +458,8 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           hoveredPoint={hoveredPoint}
           onRouteClick={handleRouteClick}
           className="absolute inset-0"
+          transitOverlay={transitOverlay}
+          transitColor={selectedItem?.color}
         />
 
         {/* Floating Route Cards (Desktop) - hide when detail panel is open */}
@@ -626,7 +495,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
             ))}
 
             {/* Generate more button */}
-            {hasMoreCandidates && !calculatingRoutes && calculatedRoutes.length < ROUTES_TARGET && (
+            {hasMoreCandidates && !calculatingRoutes && (
               <button
                 onClick={handleGenerateMore}
                 className="w-full p-3 rounded-xl bg-slate-800/60 backdrop-blur-md border border-slate-600/50
@@ -639,32 +508,40 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           </div>
         </div>
 
-        {/* Mobile Bottom Sheet (simplified for now) */}
-        <div className="absolute bottom-0 left-0 right-0 md:hidden bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50 z-10">
-          <div className="p-3 space-y-2 max-h-48 overflow-y-auto">
-            {calculatedRoutes.slice(0, 5).map((item, index) => (
-              <RouteCardMini
-                key={item.stop.id}
-                item={item}
-                index={index}
-                isSelected={selectedRouteIndex === index}
-                onSelect={handleRouteClick}
-              />
-            ))}
-          </div>
-        </div>
+        {/* Mobile Bottom Sheet */}
+        <MobileBottomSheet
+          routes={calculatedRoutes}
+          selectedRouteIndex={selectedRouteIndex}
+          onSelect={handleRouteClick}
+          onClose={() => setSelectedRouteIndex(null)}
+          showTransitOnMap={showTransitOnMap}
+          onToggleShowTransit={() => setShowTransitOnMap(s => !s)}
+          activity={activity}
+          pace={pace}
+          onPaceChange={setPace}
+          onDownloadGPX={handleDownloadGPX}
+          onHoverPoint={setHoveredPoint}
+          dbApiAvailable={dbApiAvailable}
+          // new props for mobile find more
+          hasMoreCandidates={hasMoreCandidates}
+          calculatingRoutes={calculatingRoutes}
+          onGenerateMore={handleGenerateMore}
+        />
 
         {/* Detail Panel (slides in from right) */}
         {selectedItem && (
           <div className="absolute top-0 right-0 bottom-0 w-full z-20 animate-slide-in-right" style={{ width: 'min(100%, max(35%, 400px))' }}>
             <RouteDetailPanel
               item={selectedItem}
-              onClose={() => setSelectedRouteIndex(null)}
+              onClose={() => { setSelectedRouteIndex(null); setShowTransitOnMap(false) }}
               onHoverPoint={setHoveredPoint}
               onDownloadGPX={handleDownloadGPX}
               activity={activity}
               pace={pace}
               onPaceChange={setPace}
+              showTransitOnMap={showTransitOnMap}
+              onToggleShowTransit={() => setShowTransitOnMap(s => !s)}
+              dbApiAvailable={dbApiAvailable}
             />
           </div>
         )}

@@ -57,12 +57,16 @@
 - [ ] May need to debounce route updates or delay map initialization
 
 ### 2. Verify Elevation Profile Display
-**Status:** Needs Testing
-**Issue:** Canvas may not be drawing due to dimension issues
+**Status:** Done (manual verification)
+**Update:** Elevation sampling now resamples routes into equally spaced points; elevation samples are cached and two-pass smoothing reduces stair-step artifacts from meter-quantized API results.
+
+**Follow-ups:**
+- [ ] Add cache eviction / TTL (LRU or time-based expiry) to avoid unbounded `localStorage` growth
+- [ ] Add a visual regression test or screenshot-based QA for elevation smoothing to prevent regressions
 
 **Debug logs to check:**
 - `[ElevationProfile] Draw effect - canvas:` should show valid dimensions
-- Check if elevation data is being fetched successfully
+- Check if elevation data is being fetched successfully (look for `[Elevation] Resampled to`, `[Elevation] Fetching batch`, and `[Elevation] Applied two-pass smoothing`)
 
 ---
 
