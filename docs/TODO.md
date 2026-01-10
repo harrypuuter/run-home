@@ -67,6 +67,19 @@ The scope of Phase 6 is focused on mobile UX polish, route editing, and performa
 
 ---
 
+## 📦 Phase 7 — MapLibre Followups (planned)
+Phase 7 continues the MapLibre redesign with accessibility, performance, and polishing tasks. See `docs/FEATURE_MAPLIBRE_REDESIGN.md` for the full spec and mockups.
+
+- [ ] Accessibility audit & keyboard navigation for full-page map and bottom sheet
+- [ ] Performance profiling: lazy-load non-critical layers, debounce expensive updates
+- [ ] Visual polish: route dash animation, glow tuning, and 3D building toggles
+- [ ] Route editor improvements: waypoint snapping and undo/redo
+- [ ] Add visual regression checks for map / elevation rendering
+
+**Notes:**
+- Phase 7 ties closely to the MapLibre redesign doc; when ready, create E2E tests using `DebugMapLibre` for deterministic cases.
+---
+
 ## 🟢 Low Priority
 
 ### 4. Route Alternatives
