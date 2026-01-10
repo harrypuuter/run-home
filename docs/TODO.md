@@ -41,21 +41,6 @@
 
 ## 🔴 High Priority - Next Session
 
-### 1. Fix WebGL Context Loss
-**Status:** In Progress
-**Issue:** MapLibre repeatedly losing WebGL context during HMR and route calculation
-
-**Symptoms:**
-- `WebGL context was lost` errors in console
-- `mapLoaded: false styleLoaded: false` prevents route display
-- Routes calculate correctly but don't appear on map
-
-**Attempted fixes:**
-- [x] Added `preserveDrawingBuffer: true` to map options
-- [x] Added WebGL context loss/restore event handlers
-- [x] Added context validity check before route rendering
-- [ ] May need to debounce route updates or delay map initialization
-
 ### 2. Verify Elevation Profile Display
 **Status:** Done (manual verification)
 **Update:** Elevation sampling now resamples routes into equally spaced points; elevation samples are cached and two-pass smoothing reduces stair-step artifacts from meter-quantized API results.
