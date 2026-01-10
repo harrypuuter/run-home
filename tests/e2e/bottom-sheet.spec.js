@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test'
+import { setupApiMocks } from './fixtures/api-mocks.js'
 
-test('mobile bottom sheet open/close and keyboard interaction', async ({ page }) => {  // Force mobile viewport to ensure mobile sheet is present (robust across CI configs)
+test('mobile bottom sheet open/close and keyboard interaction', async ({ page }) => {
+  // Setup API mocks to avoid rate limiting and ensure consistent results
+  await setupApiMocks(page)
+
+  // Force mobile viewport to ensure mobile sheet is present (robust across CI configs)
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/run-home/debug')
   // Start debug session

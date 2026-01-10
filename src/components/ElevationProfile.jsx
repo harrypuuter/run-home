@@ -387,6 +387,7 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
       >
         <canvas
           ref={canvasRef}
+          data-testid="elevation-canvas"
           className="block"
           style={{ width: '100%', height }}
         />

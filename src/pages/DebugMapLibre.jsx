@@ -59,6 +59,7 @@ function DebugMapLibre() {
   const [debugConfig, setDebugConfig] = useState(DEFAULT_STATE)
   const [isRunning, setIsRunning] = useState(false)
   const [runKey, setRunKey] = useState(0)
+  const [useSampleRoute, setUseSampleRoute] = useState(false)
 
   // Build the state that RouteResults expects
   const buildState = useCallback(() => {
@@ -91,6 +92,27 @@ function DebugMapLibre() {
 
   const handleStart = () => {
     setState(buildState())
+    setRunKey(prev => prev + 1)
+    setIsRunning(true)
+    setShowSettings(false)
+  }
+
+  const handleStartWithSample = () => {
+    const s = buildState()
+    // Add a simple sample route geometry (short polyline near the center)
+    const sampleRoute = {
+      stop: { id: 'sample-1', name: 'Sample Stop', lat: s.homeLocation.lat + 0.02, lng: s.homeLocation.lng + 0.02, type: 'train' },
+      route: {
+        distance: 5200,
+        duration: 3600,
+        geometry: { type: 'LineString', coordinates: [ [s.homeLocation.lng + 0.02, s.homeLocation.lat + 0.02], [s.homeLocation.lng, s.homeLocation.lat] ] }
+      },
+      color: '#3b82f6',
+      transitJourney: null,
+      noTransitInfo: true,
+    }
+
+    setState({ ...s, debugSeedRoutes: [ sampleRoute ], debugSelectFirstRoute: true })
     setRunKey(prev => prev + 1)
     setIsRunning(true)
     setShowSettings(false)
@@ -143,6 +165,12 @@ function DebugMapLibre() {
               >
                 <RefreshCw className="w-4 h-4" />
                 Restart
+              </button>
+              <button
+                onClick={handleStartWithSample}
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm transition-colors"
+              >
+                Use Sample Route
               </button>
               <a
                 href="/run-home/"

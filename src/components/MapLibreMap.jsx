@@ -12,7 +12,7 @@ function MapLibreMap({
   center = [10, 50], // [lng, lat] - MapLibre uses lng,lat order
   zoom = 4,
   marker = null, // [lat, lng] for home location
-  routes = [], // Array of { stop, route, color }
+  routes = [], // Array of { stop, route, color, editMode, editableWaypoints }
   selectedRouteIndex = null,
   hoveredPoint = null,
   onRouteClick,
@@ -22,6 +22,10 @@ function MapLibreMap({
   // Transit overlay: GeoJSON feature (LineString) to show transit journey
   transitOverlay = null,
   transitColor = '#3b82f6',
+  // Route editor callbacks
+  onAddWaypoint,
+  onWaypointMove,
+  onWaypointClick,
 }) {
   const mapContainer = useRef(null)
   const map = useRef(null)
@@ -77,6 +81,11 @@ function MapLibreMap({
 
       // Handle map clicks
       map.current.on('click', (e) => {
+        // If editMode is enabled, let parent handle adding a waypoint
+        if (onAddWaypoint) {
+          onAddWaypoint({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+          return
+        }
         onClick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
       })
     } catch (err) {
@@ -155,6 +164,14 @@ function MapLibreMap({
       return
     }
 
+    // Handle editable waypoints: remove previous waypoint markers
+    markersRef.current
+      .filter(m => m._type === 'waypoint')
+      .forEach(m => m.remove())
+    markersRef.current = markersRef.current.filter(m => m._type !== 'waypoint')
+
+    if (!routes || routes.length === 0) return
+
     // Check if map is still valid (safer than checking WebGL directly)
     if (!map.current.loaded() || !map.current.isStyleLoaded()) {
       console.log('[MapLibreMap] Routes effect skipped - map or style not ready')
@@ -202,6 +219,43 @@ function MapLibreMap({
     // Add new routes
     routes.forEach((item, index) => {
       if (!item.route?.geometry?.coordinates) return
+
+      // Render editable waypoints for the selected route if provided
+      if (item.editableWaypoints && item.editableWaypoints.length > 0) {
+        item.editableWaypoints.forEach((wp, widx) => {
+          const el = document.createElement('div')
+          el.innerHTML = `
+            <div style="
+              width: 14px;
+              height: 14px;
+              background: #f59e0b;
+              border-radius: 50%;
+              border: 2px solid white;
+              box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+              cursor: pointer;
+            "></div>
+          `
+
+          const wpMarker = new maplibregl.Marker({ element: el, anchor: 'center', draggable: item.editMode })
+            .setLngLat([wp.lng, wp.lat])
+            .addTo(map.current)
+
+          wpMarker._type = 'waypoint'
+          wpMarker._routeIndex = index
+          wpMarker._wpIndex = widx
+
+          wpMarker.on('dragend', () => {
+            const lngLat = wpMarker.getLngLat()
+            onWaypointMove?.(index, widx, { lat: lngLat.lat, lng: lngLat.lng })
+          })
+
+          wpMarker.getElement().addEventListener('click', () => {
+            onWaypointClick?.(index, widx)
+          })
+
+          markersRef.current.push(wpMarker)
+        })
+      }
 
       const sourceId = `route-${index}`
       const isSelected = selectedRouteIndex === index
@@ -465,6 +519,7 @@ function MapLibreMap({
 
   return (
     <div
+      id="main-map"
       ref={mapContainer}
       className={className}
       style={{ position: 'relative', width: '100%', height: '100%', minHeight: '200px' }}

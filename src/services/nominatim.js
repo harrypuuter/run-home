@@ -90,16 +90,61 @@ export async function fetchOSMTransitStations({ lat, lng, innerRadius = 0, outer
   try {
     console.log('[OSM] Fetching transit stations in annulus:', innerRadius, '-', outerRadius, 'm from', lat, lng)
 
-    const response = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-    })
+    // Primary + alternate Overpass endpoints to try when the primary is overloaded or times out (504)
+    const OVERPASS_ALTERNATES = [
+      'https://lz4.overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+    ]
 
-    if (!response.ok) {
-      throw new Error(`Overpass API failed: ${response.status}`)
+    const urlsToTry = [OVERPASS_URL, ...OVERPASS_ALTERNATES]
+    let response = null
+
+    for (const url of urlsToTry) {
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: `data=${encodeURIComponent(query)}`,
+        })
+      } catch (e) {
+        console.warn(`[OSM] Overpass fetch to ${url} failed:`, e)
+        // Try next endpoint
+        response = null
+      }
+
+      if (!response) continue
+
+      if (!response.ok) {
+        // Try to detect rate-limit responses and throw a distinct error so the UI can surface it
+        let text = ''
+        try { text = await response.text() } catch (e) { text = '' }
+        if (response.status === 429 || /rate|limit|too many requests/i.test(text)) {
+          const err = new Error('Overpass API rate limit exceeded')
+          err.name = 'OverpassRateLimit'
+          throw err
+        }
+
+        // Gateway timeout or other server errors: try next available endpoint
+        if (response.status === 504 || (response.status >= 500 && response.status < 600)) {
+          console.warn(`[OSM] Overpass ${url} returned ${response.status}, trying next endpoint if available`)
+          response = null
+          continue
+        }
+
+        // Non-retryable error
+        throw new Error(`Overpass API failed: ${response.status}`)
+      }
+
+      // Successful response
+      break
+    }
+
+    // If we exhausted endpoints without a successful response, return an empty list (fallback)
+    if (!response || !response.ok) {
+      console.error('[OSM] All Overpass endpoints failed or timed out')
+      return []
     }
 
     const data = await response.json()
@@ -141,6 +186,11 @@ export async function fetchOSMTransitStations({ lat, lng, innerRadius = 0, outer
     return filtered
 
   } catch (err) {
+    // If Overpass is rate-limiting requests, rethrow to let higher-level code show a helpful message to users
+    if (err && err.name === 'OverpassRateLimit') {
+      throw err
+    }
+
     console.error('[OSM] Failed to fetch transit stations:', err)
     return []
   }

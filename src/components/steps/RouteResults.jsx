@@ -103,11 +103,25 @@ const RouteCardMini = memo(function RouteCardMini({ item, index, isSelected, onS
 function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   const [calculatingRoutes, setCalculatingRoutes] = useState(false)
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(null)
+
+  // Allow selecting an initial route from debug state (debugSelectFirstRoute)
+  useEffect(() => {
+    if (state?.debugSelectFirstRoute) {
+      setSelectedRouteIndex(0)
+    }
+  }, [state?.debugSelectFirstRoute])
   const [calculatedRoutes, setCalculatedRoutes] = useState([])
   const [hoveredPoint, setHoveredPoint] = useState(null)
   const [searchPhase, setSearchPhase] = useState('')
   const [currentTolerance, setCurrentTolerance] = useState(0) // 0 = 10%, 1 = 20%, 2 = 30%
   const [pace, setPace] = useState(DEFAULT_PACE.run)
+
+  // Route editor state: per-route waypoints and edit mode
+  const [routeEditors, setRouteEditors] = useState({})
+
+  const setRouteEditor = (routeIndex, updates) => {
+    setRouteEditors(prev => ({ ...(prev || {}), [routeIndex]: { ...(prev?.[routeIndex] || { waypoints: [] , editMode: false }), ...updates } }))
+  }
 
   // Refs for tracking state across async operations
   const candidatesRef = useRef([])
@@ -128,6 +142,39 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   useEffect(() => {
     if (!homeLocation || hasInitializedRef.current) return
     hasInitializedRef.current = true
+
+    // Expose a debug helper for selecting a route (only in development/debug pages)
+    try {
+      window.__runhome_selectRoute = (index) => {
+        setSelectedRouteIndex(index)
+      }
+    } catch (e) {
+      // ignore in non-browser environments
+    }
+
+    // Debug: seed routes list if provided in state.debugSeedRoutes (useful for deterministic tests)
+    if (state?.debugSeedRoutes && Array.isArray(state.debugSeedRoutes) && state.debugSeedRoutes.length > 0) {
+      console.log('[Debug] Using debugSeedRoutes to short-circuit route search')
+      const seeded = state.debugSeedRoutes.map((r, i) => ({
+        ...r,
+        color: ROUTE_COLORS[i % ROUTE_COLORS.length],
+        noTransitInfo: true,
+        transitJourney: null,
+      }))
+      setCalculatedRoutes(seeded)
+      updateState({ isLoading: false })
+
+      // If debug requests selecting the first route, dispatch a small delay then select it
+      if (state.debugSelectFirstRoute) {
+        setTimeout(() => {
+          setSelectedRouteIndex(0)
+          // Also clear the flag to avoid repeated behavior
+          updateState({ debugSelectFirstRoute: false })
+        }, 50)
+      }
+
+      return
+    }
 
     const findCandidates = async () => {
       updateState({ isLoading: true, error: null })
@@ -174,7 +221,11 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
         calculateRoutes(sorted, 0)
       } catch (err) {
         console.error('[Algorithm] Failed to find candidates:', err)
-        updateState({ isLoading: false, error: 'Failed to find nearby stations. Please try again.' })
+        if (err && err.name === 'OverpassRateLimit') {
+          updateState({ isLoading: false, error: 'The Overpass API is currently rate-limiting requests. Please wait a few minutes and try again.' })
+        } else {
+          updateState({ isLoading: false, error: 'Failed to find nearby stations. Please try again.' })
+        }
       }
     }
 
@@ -298,6 +349,42 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
 
   // ============================================
   // Event Handlers
+
+  // Editor handlers
+  const toggleEditMode = (routeIndex) => {
+    const editor = routeEditors[routeIndex] || { waypoints: [], editMode: false }
+    setRouteEditor(routeIndex, { editMode: !editor.editMode })
+  }
+
+  const addWaypoint = (routeIndex, wp) => {
+    const editor = routeEditors[routeIndex] || { waypoints: [], editMode: true }
+    const newWaypoints = [...(editor.waypoints || []), wp]
+    setRouteEditor(routeIndex, { waypoints: newWaypoints, editMode: true })
+  }
+
+  const moveWaypoint = (routeIndex, wpIndex, newWp) => {
+    const editor = routeEditors[routeIndex] || { waypoints: [] }
+    const newWaypoints = [...(editor.waypoints || [])]
+    newWaypoints[wpIndex] = newWp
+    setRouteEditor(routeIndex, { waypoints: newWaypoints })
+  }
+
+  const removeWaypoint = (routeIndex, wpIndex) => {
+    const editor = routeEditors[routeIndex] || { waypoints: [] }
+    const newWaypoints = [...(editor.waypoints || [])]
+    newWaypoints.splice(wpIndex, 1)
+    setRouteEditor(routeIndex, { waypoints: newWaypoints })
+  }
+
+  const saveWaypoints = async (routeIndex) => {
+    // For now just log, real implementation would re-route via OSRM with waypoints
+    console.log('[Editor] Save waypoints for route', routeIndex, routeEditors[routeIndex])
+    setRouteEditor(routeIndex, { editMode: false })
+  }
+
+  const cancelEditing = (routeIndex) => {
+    setRouteEditor(routeIndex, { editMode: false })
+  }
   // ============================================
   const handleRouteClick = useCallback((index) => {
     // Compute the next selected index deterministically and act on it immediately
@@ -448,19 +535,34 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
       {/* Main content */}
       <div className="flex-1 flex relative overflow-hidden">
         {/* Full-page Map */}
-        <MapLibreMap
-          key="main-map"
-          center={[homeLocation.lng, homeLocation.lat]}
-          zoom={11}
-          marker={[homeLocation.lat, homeLocation.lng]}
-          routes={calculatedRoutes}
-          selectedRouteIndex={selectedRouteIndex}
-          hoveredPoint={hoveredPoint}
-          onRouteClick={handleRouteClick}
-          className="absolute inset-0"
-          transitOverlay={transitOverlay}
-          transitColor={selectedItem?.color}
-        />
+        {(() => {
+          const mapRoutes = calculatedRoutes.map((r, idx) => ({
+            ...r,
+            editMode: !!routeEditors[idx]?.editMode,
+            editableWaypoints: routeEditors[idx]?.waypoints || [],
+          }))
+          return (
+            <MapLibreMap
+              key="main-map"
+              center={[homeLocation.lng, homeLocation.lat]}
+              zoom={11}
+              marker={[homeLocation.lat, homeLocation.lng]}
+              routes={mapRoutes}
+              selectedRouteIndex={selectedRouteIndex}
+              hoveredPoint={hoveredPoint}
+              onRouteClick={handleRouteClick}
+              className="absolute inset-0"
+              transitOverlay={transitOverlay}
+              transitColor={selectedItem?.color}
+              onAddWaypoint={(wp) => {
+                if (selectedRouteIndex !== null) addWaypoint(selectedRouteIndex, wp)
+              }}
+              onWaypointMove={(routeIndex, wpIndex, newWp) => moveWaypoint(routeIndex, wpIndex, newWp)}
+              onWaypointClick={(routeIndex, wpIndex) => removeWaypoint(routeIndex, wpIndex)}
+            />
+          )
+        })()}
+
 
         {/* Floating Route Cards (Desktop) - hide when detail panel is open */}
         <div
@@ -542,6 +644,14 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
               showTransitOnMap={showTransitOnMap}
               onToggleShowTransit={() => setShowTransitOnMap(s => !s)}
               dbApiAvailable={dbApiAvailable}
+              // Editor props
+              editMode={routeEditors[selectedRouteIndex]?.editMode}
+              waypoints={routeEditors[selectedRouteIndex]?.waypoints || []}
+              onToggleEdit={() => toggleEditMode(selectedRouteIndex)}
+              onAddWaypoint={(wp) => addWaypoint(selectedRouteIndex, wp)}
+              onRemoveWaypoint={(idx) => removeWaypoint(selectedRouteIndex, idx)}
+              onSave={() => saveWaypoints(selectedRouteIndex)}
+              onCancel={() => cancelEditing(selectedRouteIndex)}
             />
           </div>
         )}

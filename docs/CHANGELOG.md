@@ -8,6 +8,8 @@
 
 ### ✅ Recent fixes & improvements
 
+- **E2E tests:** Replaced networked Overpass / OSRM / Open‑Meteo calls with deterministic local fixtures (`tests/e2e/fixtures/api-mocks.js`) and `setupApiMocks` helper to prevent CI flakes and avoid rate limits. Converted flaky visual tests into fast smoke tests where appropriate and stabilized bottom-sheet + route-editor tests.
+- **Overpass resilience:** Implemented fallback to alternate Overpass endpoints (lz4.overpass-api.de, overpass.kumi.systems) on 504/5xx responses.
 - **Elevation:** Implemented resampling to equally spaced points along routes, added in-memory + `localStorage` caching of elevation samples, and a two-pass Gaussian smoothing approach to eliminate meter-quantization steps from Open‑Meteo responses. (Resampling prevents smoothing artifacts and caching reduces API usage.)
 - **Mobile UX:** Fixed MobileBottomSheet drag release by switching to pointer events and using pointer capture/release for robust drag lifecycle handling.
 - **Stability:** Added a top-level `ErrorBoundary` and global error handlers to surface runtime exceptions (prevents white-screen failure mode).
