@@ -42,6 +42,8 @@ CI & logs (how to access)
   - View a run and open logs in browser: `gh run view <run-id> --repo <owner>/<repo> --web`
   - Show run metadata in JSON: `gh run view <run-id> --repo <owner>/<repo> --json statusCheckRollup,checkSuites`
 
+- Note on duplicate runs: The workflow historically ran on both `push` and `pull_request` for `feature/**` branches, which caused PRs to trigger two runs (one for the push and one for the PR). To avoid this, the E2E workflow has been changed to only run on `push` for the `main` branch; PRs still run via the `pull_request` trigger. If you see two runs for the same commit, check whether one was triggered by a `push` and the other by a `pull_request` event.
+
 - API (curl):
   - List runs on a branch:
     `curl -s "https://api.github.com/repos/<owner>/<repo>/actions/runs?branch=<branch>" | jq '.workflow_runs[] | {id, name, status, conclusion, html_url}'`

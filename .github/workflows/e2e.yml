@@ -3,8 +3,9 @@ name: E2E Tests (Playwright)
 on:
   pull_request:
     branches: [ main, feature/** ]
+  # Only run on push to `main` to avoid duplicate runs when a PR is opened/updated
   push:
-    branches: [ main, feature/** ]
+    branches: [ main ]
 
 jobs:
   playwright:
