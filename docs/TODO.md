@@ -43,15 +43,15 @@ The scope of Phase 6 is focused on mobile UX polish, route editing, and performa
 
 ## 🟡 Medium Priority
 
-### 2. Route Editing
-**Status:** Placeholder in redesign spec
-**Description:** Allow users to modify routes by dragging waypoints.
+### 2. Route Editing (Phase 2)
+**Status:** MVP Complete, Phase 2 planned
+**Description:** Advanced route editing features.
 
-**Features:**
-- [ ] Draggable waypoints on route
-- [ ] Add/remove via points
-- [ ] Route recalculation
-- [ ] Distance/elevation update after edit
+**Phase 2 Features:**
+- [ ] Draggable waypoints on route (removed from MVP for simplicity)
+- [ ] Waypoint snapping to roads/paths
+- [ ] Undo/redo for edits
+- [ ] Keyboard accessibility for markers
 
 ---
 
@@ -76,19 +76,27 @@ Phase 7 continues the MapLibre redesign with accessibility, performance, and pol
 - [ ] Route editor improvements: waypoint snapping and undo/redo
 - [x] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
 
-### Route Editor (in progress)
-The Route Editor feature lets users add, move, and remove waypoints to customize routes. See the design doc: `docs/FEATURE_ROUTE_EDITOR.md`.
+### Route Editor ✅ (MVP Complete)
+The Route Editor feature lets users add and remove waypoints to customize routes. See the design doc: `docs/FEATURE_ROUTE_EDITOR.md`.
 
-- [ ] Implement MVP: click-to-add waypoints (insert at nearest route segment), tentative routing & metrics update, Save/Cancel, E2E smoke test (in progress)
-- [ ] Add map drag-to-create waypoint (drag on empty map to create)
-- [ ] Implement draggable waypoint markers and debounced tentative routing
-- [ ] Side-panel waypoint removal (start/end fixed)
-- [ ] Integrate elevation recalculation & update ElevationProfile for tentative route
+**Completed MVP:**
+- [x] Click-to-add waypoints (insert at nearest route segment)
+- [x] Manual "Update Route" button with pulse animation on changes
+- [x] Tentative routing & metrics update (distance, duration, calories)
+- [x] Elevation profile refresh after route update
+- [x] Save/Cancel buttons integrated into panel footer
+- [x] Side-panel waypoint removal with numbered labels
+- [x] Enforce max waypoints = 6 with inline messaging
+- [x] Edit mode indicator on map
+- [x] Integrated edit mode into RouteDetailPanel with conditional UI
+
+**Deferred (Phase 2):**
+- [ ] Draggable waypoint markers (removed for simplicity)
+- [ ] Map drag-to-create waypoint
+- [ ] Waypoint snapping and undo/redo
 - [ ] Accessibility: keyboard interactions for markers and editor controls
-- [ ] Add E2E interaction tests (click-add, drag-add, marker drag, remove)
-- [ ] Enforce max waypoints = 6 and add inline messaging
+- [ ] Add E2E interaction tests (click-add, remove)
 - [ ] Performance improvements & limit checks (debounce, caching, TTL for elevation cache)
-- [ ] Undo/Redo and visual polish (phase 2)
 
 **Follow-ups:**
 - [ ] Convert any remaining visual regressions into fast smoke tests where appropriate

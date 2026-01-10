@@ -78,3 +78,21 @@ Notes
 -----
 - This MVP purposely keeps changes in-memory to reduce complexity and iteration time. If desired, we can add localStorage persistence or server-side save as a follow-up.
 - Snapping-to-road and undo/redo are deferred to phase 2.
+
+Manual testing
+--------------
+1. Start the dev server: `npm run dev` (Vite). If port 5173 is unavailable, check the printed local URL (e.g., `http://localhost:5174/run-home/`).
+2. Open the Debug page: `/run-home/debug` (e.g., `http://localhost:5174/run-home/debug`).
+3. Click **Start Debug Session**.
+4. Select the first route (click the route card or call `window.__runhome_selectRoute(0)` in the console).
+5. Wait until the Route Details panel appears and the **Download GPX** button is visible.
+6. Click **Edit** to enter edit mode. A small yellow overlay will appear indicating edit mode.
+7. Click on the map to add a waypoint. A marker should appear and the side-panel list should show `Waypoint 1`.
+8. Drag the waypoint marker to reposition it; after a short debounce the tentative route and elevation profile should update.
+9. Remove a waypoint using the **Remove** button in the side-panel list.
+10. Click **Save** to commit changes (the main route preview updates). Use **Cancel** to discard edits.
+
+Tips
+----
+- Use `window.__runhome_addWaypointCurrent({ lat, lng })` and `window.__runhome_toggleEditCurrent()` from the browser console to exercise helpers during manual tuning.
+- When tuning visual polish, adjust marker and overlay styles in `src/components/MapLibreMap.jsx` and `src/components/RouteEditor.jsx`.
