@@ -58,6 +58,8 @@ export default function MobileBottomSheet({
   // Start drag
   const [isDraggingState, setIsDraggingState] = useState(false)
   const lastPositionsRef = useRef([]) // [{t, y}]
+  const [announce, setAnnounce] = useState('')
+  const announcerRef = useRef(null)
 
   const startDrag = useCallback((clientY) => {
     startYRef.current = clientY
@@ -108,12 +110,12 @@ export default function MobileBottomSheet({
     // Decide based on velocity first (fast gestures)
     if (velocity < -FLING_VELOCITY_PX_PER_MS) {
       // Fast upward swipe -> open fully
-      setTranslateY(sheetStates.current.full)
+      animateTo(sheetStates.current.full)
       return
     }
     if (velocity > FLING_VELOCITY_PX_PER_MS) {
       // Fast downward swipe -> close to peek
-      setTranslateY(sheetStates.current.peek)
+      animateTo(sheetStates.current.peek)
       onClose?.()
       return
     }
@@ -129,7 +131,7 @@ export default function MobileBottomSheet({
       if (Math.abs(translateY - s.value) < Math.abs(translateY - best.value)) best = s
     }
 
-    setTranslateY(best.value)
+    animateTo(best.value)
     if (best.name === 'peek') {
       // Consider it closed if peek
       onClose?.()
@@ -208,12 +210,85 @@ export default function MobileBottomSheet({
     }
   }
 
+  const animRef = useRef(null)
+  const animStateRef = useRef({ running: false })
+
+  // Spring animator: simple damped spring
+  function cancelAnimation() {
+    if (animRef.current) {
+      cancelAnimationFrame(animRef.current)
+      animRef.current = null
+    }
+    animStateRef.current.running = false
+  }
+
+  function animateTo(target) {
+    cancelAnimation()
+    animStateRef.current.running = true
+
+    let y = translateY
+    let v = 0
+    const stiffness = 0.02 // spring stiffness
+    const damping = 0.12 // damping factor
+
+    let last = performance.now()
+    function step(now) {
+      const dt = Math.min(32, now - last)
+      last = now
+      // spring force towards target
+      const force = (target - y) * stiffness
+      v += force * dt
+      // damping
+      v *= (1 - damping)
+      y += v * dt
+
+      // If close enough and velocity small, finish
+      if (Math.abs(target - y) < 0.5 && Math.abs(v) < 0.02) {
+        setTranslateY(target)
+        animStateRef.current.running = false
+        animRef.current = null
+        return
+      }
+
+      setTranslateY(Math.max(0, Math.min(sheetStates.current.peek, Math.round(y))))
+      animRef.current = requestAnimationFrame(step)
+    }
+
+    animRef.current = requestAnimationFrame(step)
+  }
+
   const sheetStyle = {
     transform: `translateY(${translateY}px)`,
-    transition: isDraggingState ? 'none' : 'transform 320ms cubic-bezier(0.22, 0.8, 0.2, 1)'
+    transition: isDraggingState || animStateRef.current.running ? 'none' : 'transform 320ms cubic-bezier(0.22, 0.8, 0.2, 1)'
   }
 
   const selectedItem = selectedRouteIndex !== null ? routes[selectedRouteIndex] : null
+
+  // Announce sheet position changes for accessibility when settled
+  useEffect(() => {
+    if (isDraggingState || animStateRef.current.running) return
+
+    const full = sheetStates.current.full
+    const half = sheetStates.current.half
+    const peek = sheetStates.current.peek
+
+    const distTo = (v) => Math.abs(translateY - v)
+    const nearest = [ { name: 'full', value: full }, { name: 'half', value: half }, { name: 'peek', value: peek } ].reduce((a, b) => distTo(a.value) < distTo(b.value) ? a : b)
+
+    let msg = ''
+    if (nearest.name === 'full') msg = 'Sheet expanded'
+    else if (nearest.name === 'half') msg = 'Sheet partially expanded'
+    else msg = 'Sheet closed'
+
+    if (msg !== announce) setAnnounce(msg)
+  }, [translateY, isDraggingState, announce])
+
+  useEffect(() => {
+    if (!announce || !announcerRef.current) return
+    announcerRef.current.textContent = announce
+    const t = setTimeout(() => { if (announcerRef.current) announcerRef.current.textContent = '' }, 3000)
+    return () => clearTimeout(t)
+  }, [announce])
 
   return (
     <div
@@ -222,6 +297,8 @@ export default function MobileBottomSheet({
       style={{ height: '65vh', maxHeight: '85vh' }}
       aria-hidden="false"
     >
+      {/* Accessibility live region */}
+      <div ref={announcerRef} className="sr-only" aria-live="polite" aria-atomic="true" />
       <div
         className="h-full rounded-t-2xl bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50 shadow-2xl overflow-hidden"
         style={sheetStyle}
