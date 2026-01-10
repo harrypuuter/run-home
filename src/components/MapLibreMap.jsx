@@ -233,6 +233,9 @@ function MapLibreMap({
               'line-width': 12,
               'line-opacity': 0.3,
               'line-blur': 4,
+              // Smooth transitions for glow when toggling selection
+              'line-opacity-transition': { duration: 300, delay: 0 },
+              'line-blur-transition': { duration: 300, delay: 0 },
             },
           })
         }
@@ -250,6 +253,9 @@ function MapLibreMap({
             'line-color': item.color,
             'line-width': isSelected ? 5 : 4,
             'line-opacity': isVisible ? (isSelected ? 1 : 0.8) : 0.3,
+            // Transitions for width/opacity to animate selection/dimming
+            'line-width-transition': { duration: 300, delay: 0 },
+            'line-opacity-transition': { duration: 300, delay: 0 },
           },
         })
 
