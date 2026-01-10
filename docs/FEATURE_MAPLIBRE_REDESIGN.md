@@ -525,7 +525,7 @@ Helpful running context pulled from OpenStreetMap/Overpass:
 - [ ] Proper viewport handling
 
 ### Phase 6: Polish
-- [ ] Animations and transitions
+- [x] Animations and transitions (started: route selection transitions and card scale)
 - [ ] Loading states
 - [ ] Error handling
 - [ ] Accessibility (keyboard nav, screen readers)
