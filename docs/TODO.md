@@ -75,6 +75,11 @@ Phase 7 continues the MapLibre redesign with accessibility, performance, and pol
 - [ ] Visual polish: route dash animation, glow tuning, and 3D building toggles
 - [ ] Route editor improvements: waypoint snapping and undo/redo
 - [ ] Add visual regression checks for map / elevation rendering
+- [ ] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
+
+**Follow-ups:**
+- [ ] Convert any remaining visual regressions into fast smoke tests where appropriate
+- [ ] Add a small visual check for elevation smoothing once we can capture a stable image via `DebugMapLibre` or a local-run-only screenshot test
 
 **Notes:**
 - Phase 7 ties closely to the MapLibre redesign doc; when ready, create E2E tests using `DebugMapLibre` for deterministic cases.

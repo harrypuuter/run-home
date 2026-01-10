@@ -1,6 +1,7 @@
 import { X, Download, Route, Clock, Flame, Flag } from 'lucide-react'
 import ElevationProfile from '../ElevationProfile'
 import TransitJourneyDetails from './TransitJourneyDetails'
+import RouteEditor from '../RouteEditor'
 import { getStopIcon } from '../../services/deutschebahn'
 import { formatTime } from '../../services/deutschebahn'
 
@@ -39,7 +40,7 @@ function StatBox({ icon, label, value }) {
   )
 }
 
-export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownloadGPX, activity, pace, onPaceChange, showTransitOnMap = false, onToggleShowTransit, dbApiAvailable = false }) {
+export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownloadGPX, activity, pace, onPaceChange, showTransitOnMap = false, onToggleShowTransit, dbApiAvailable = false, editMode = false, waypoints = [], onToggleEdit, onAddWaypoint, onRemoveWaypoint, onSave, onCancel }) {
   if (!item || !item.route) {
     return (
       <div className="h-full flex items-center justify-center text-slate-400">
@@ -146,11 +147,16 @@ export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownlo
           </div>
         )}
 
-        <button disabled className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800/30 border border-slate-700/50 text-slate-500 cursor-not-allowed">
-          <span>✏️</span>
-          Edit Route
-          <span className="text-xs bg-slate-700 px-2 py-0.5 rounded-full">Soon</span>
-        </button>
+        {/* Route editor UI */}
+        <RouteEditor
+          editMode={editMode}
+          waypoints={waypoints}
+          onToggleEdit={onToggleEdit}
+          onAddWaypoint={onAddWaypoint}
+          onRemoveWaypoint={onRemoveWaypoint}
+          onSave={onSave}
+          onCancel={onCancel}
+        />
       </div>
 
       <div className="p-4 border-t border-slate-700/50 space-y-2">
