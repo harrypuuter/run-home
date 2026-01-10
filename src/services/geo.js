@@ -101,6 +101,7 @@ export function filterByDirection(stops, homeLat, homeLng, direction) {
  * @returns {string} - Formatted distance
  */
 export function formatDistance(meters) {
+  if (typeof meters !== 'number' || !isFinite(meters)) return '--'
   if (meters < 1000) {
     return `${Math.round(meters)} m`
   }
@@ -113,6 +114,7 @@ export function formatDistance(meters) {
  * @returns {string} - Formatted duration
  */
 export function formatDuration(seconds) {
+  if (typeof seconds !== 'number' || !isFinite(seconds)) return '--'
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
 

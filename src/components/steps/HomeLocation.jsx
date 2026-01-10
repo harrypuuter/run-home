@@ -3,7 +3,6 @@ import { MapPin, Search, Navigation, Loader2, AlertTriangle } from 'lucide-react
 import Button from '../ui/Button'
 import Map from '../Map'
 import { searchLocation } from '../../services/nominatim'
-import { isInGermany } from '../../services/deutschebahn'
 import { useDebounce } from '../../hooks/useDebounce'
 
 function HomeLocation({ homeLocation, onUpdate, onNext }) {
@@ -50,11 +49,6 @@ function HomeLocation({ homeLocation, onUpdate, onNext }) {
   }
 
   const handleMapClick = (latlng) => {
-    // Check if location is in Germany
-    if (!isInGermany(latlng.lat, latlng.lng)) {
-      setError('Please select a location within Germany. This app currently only supports Deutsche Bahn transit data.')
-      return
-    }
     onUpdate({
       lat: latlng.lat,
       lng: latlng.lng,
@@ -75,12 +69,6 @@ function HomeLocation({ homeLocation, onUpdate, onNext }) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords
-        // Check if location is in Germany
-        if (!isInGermany(latitude, longitude)) {
-          setError('Your current location is outside Germany. This app currently only supports Deutsche Bahn transit data. Please search for an address in Germany.')
-          setIsLocating(false)
-          return
-        }
         onUpdate({
           lat: latitude,
           lng: longitude,
@@ -97,17 +85,11 @@ function HomeLocation({ homeLocation, onUpdate, onNext }) {
     )
   }
 
-  const canProceed = homeLocation !== null && isInGermany(homeLocation.lat, homeLocation.lng)
+  const canProceed = homeLocation !== null
 
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* Germany notice */}
-      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-start gap-2">
-        <span className="text-lg">🇩🇪</span>
-        <p className="text-sm text-blue-200">
-          This app uses Deutsche Bahn data and is currently limited to <strong>Germany</strong>.
-        </p>
-      </div>
+
 
       {/* Search bar */}
       <div className="relative">

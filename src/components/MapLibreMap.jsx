@@ -26,6 +26,7 @@ function MapLibreMap({
   transitColor = '#3b82f6',
   // Route editor callback
   onAddWaypoint,
+  departureTime = null,
 }) {
   const mapContainer = useRef(null)
   const map = useRef(null)
@@ -383,6 +384,7 @@ function MapLibreMap({
           new maplibregl.Popup({ closeButton: false }).setHTML(`
             <strong>${item.stop.name || 'Unnamed Stop'}</strong><br/>
             <span style="color: #94a3b8; text-transform: capitalize;">${item.stop.type || 'Transit stop'}</span>
+            ${marker ? `<br/><a href="https://www.google.com/maps/dir/?api=1&origin=${marker[0]},${marker[1]}&destination=${item.stop.lat},${item.stop.lng}&travelmode=transit" target="_blank" rel="noopener noreferrer" style="color:#60a5fa; font-size:12px; text-decoration:none;">🚆 Transit directions (Home → Stop)</a>` : ''}
           `)
         )
         .addTo(map.current)
@@ -421,7 +423,7 @@ function MapLibreMap({
 
 
 
-  }, [routes, selectedRouteIndex, highlightedWaypointIndex, mapLoaded, styleLoaded, marker, onRouteClick, waypointSum, routeDistances, mapRevision])
+  }, [routes, selectedRouteIndex, highlightedWaypointIndex, mapLoaded, styleLoaded, marker, onRouteClick, waypointSum, routeDistances, mapRevision, departureTime])
 
   // Handle hovered point from elevation profile
   useEffect(() => {

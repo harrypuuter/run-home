@@ -21,12 +21,13 @@ test('route editor UI smoke test', async ({ page }) => {
 
   // Toggle edit mode
   await editBtn.click()
-  await expect(page.getByRole('button', { name: /Exit edit mode|Exit/i })).toBeVisible({ timeout: 2000 })
+  // The close button in edit mode uses aria-label 'Cancel editing' and the footer shows 'Discard'
+  await expect(page.getByLabel('Cancel editing')).toBeVisible({ timeout: 3000 })
 
-  // Check for 'No waypoints yet' message when there are no waypoints
-  await expect(page.getByText(/No waypoints yet/i)).toBeVisible({ timeout: 2000 })
+  // Check for 'Tap on the map to add waypoints' empty state message when there are no waypoints
+  await expect(page.getByText(/Tap on the map to add waypoints/i)).toBeVisible({ timeout: 2000 })
 
-  // Exit edit mode
-  await page.getByRole('button', { name: /Exit edit mode|Exit/i }).click()
+  // Exit edit mode by cancelling
+  await page.getByLabel('Cancel editing').click()
   await expect(page.getByRole('button', { name: /Enter edit mode|Edit/i })).toBeVisible({ timeout: 2000 })
 })

@@ -48,6 +48,7 @@ export default function RouteDetailPanel({
   onToggleShowTransit,
   dbApiAvailable = false,
   homeLocation = null,
+  wizardDepartureTime = null,
   // Editor props
   editMode = false,
   waypoints = [],
@@ -123,6 +124,17 @@ export default function RouteDetailPanel({
           <div className="flex items-center gap-2">
             <span className="text-xl">{getStopIcon(item.stop.type)}</span>
             <h3 className="text-lg font-semibold text-white">{item.stop.name}</h3>
+            {homeLocation && (
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&origin=${homeLocation.lat},${homeLocation.lng}&destination=${item.stop.lat},${item.stop.lng}&travelmode=transit`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-sm text-sky-400 hover:text-sky-300 transition-colors"
+                aria-label="Open transit directions in Google Maps"
+              >
+                🚆 Transit directions
+              </a>
+            )}
           </div>
           {!item.noTransitInfo && item.transitJourney?.legs && (
             <p className="text-sm text-slate-400">
