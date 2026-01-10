@@ -30,7 +30,7 @@ Run-Home is a web application that helps runners and cyclists plan their journey
 - View and compare multiple route options
 - **[NEW]** Interactive elevation profile with hover synchronization
 - **[NEW]** GPX export for use in GPS devices/apps
-- **[NEW]** Transit-aware routing: transit connections are shown when available (lazy-loaded per route) 
+- **[NEW]** Transit-aware routing: transit connections are shown when available (lazy-loaded per route)
 
 ---
 

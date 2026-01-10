@@ -102,7 +102,7 @@
                   - generic [ref=e92]:
                     - img [ref=e93]
                     - text: ETA
-                  - generic [ref=e95]: 23:19
+                  - generic [ref=e95]: 23:25
               - generic [ref=e96]:
                 - heading "📈 Elevation Profile" [level=4] [ref=e97]
                 - generic [ref=e101]:

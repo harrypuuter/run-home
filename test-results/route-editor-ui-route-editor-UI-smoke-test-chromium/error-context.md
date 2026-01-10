@@ -17,11 +17,11 @@
             - generic [ref=e21]:
               - generic:
                 - region "Map" [ref=e22]
-                - button "Map marker" [ref=e23] [cursor=pointer]
-                - button "Map marker" [ref=e25] [cursor=pointer]
-                - button "Map marker" [ref=e27] [cursor=pointer]
-                - button "Map marker" [ref=e29] [cursor=pointer]:
-                  - generic [ref=e31]: 🏠
+                - button "Map marker" [ref=e23] [cursor=pointer]:
+                  - generic [ref=e25]: 🏠
+                - button "Map marker" [ref=e26] [cursor=pointer]
+                - button "Map marker" [ref=e28] [cursor=pointer]
+                - button "Map marker" [ref=e30] [cursor=pointer]
               - generic:
                 - generic [ref=e32]:
                   - button "Zoom in" [ref=e33] [cursor=pointer]
@@ -102,7 +102,7 @@
                   - generic [ref=e92]:
                     - img [ref=e93]
                     - text: ETA
-                  - generic [ref=e95]: 23:19
+                  - generic [ref=e95]: 23:25
               - generic [ref=e96]:
                 - heading "📈 Elevation Profile" [level=4] [ref=e97]
                 - generic [ref=e101]:

@@ -35,19 +35,19 @@
 ### ✅ Recent fixes & improvements
 
 - **E2E tests:** Replaced networked Overpass / OSRM / Open‑Meteo calls with deterministic local fixtures (`tests/e2e/fixtures/api-mocks.js`) and `setupApiMocks` helper to prevent CI flakes and avoid rate limits. Converted flaky visual tests into fast smoke tests where appropriate and stabilized bottom-sheet + route-editor tests.
+
+### 🌍 Globalization & UX fixes (January 10, 2026)
+- **Globalized search:** Removed Germany-only restrictions from Nominatim and the Home location UI — address search and map selection are now global.
+- **Removed Departure Time step:** The departure-time wizard step was removed; transit journeys are lazy-loaded on route selection and `departure_time` is no longer appended to Google Maps links.
+- **Generate More / route discovery:** `calculateRoutes` supports `maxResults`; the "Generate More" control loads additional routes in batches (default `ROUTES_TARGET = 5`).
+- **Improved error UX:** When partial routes exist, transient errors no longer replace the results with a full-page error — a non-blocking amber banner is shown instead; the full-page "No suitable routes" message is only shown when zero routes are found.
+- **Defensive fixes & tests:** Added defensive checks for distance/duration formatting and updated/added E2E tests for transit links and generate-more behavior.
+
 - **Overpass resilience:** Implemented fallback to alternate Overpass endpoints (lz4.overpass-api.de, overpass.kumi.systems) on 504/5xx responses.
 - **Elevation:** Implemented resampling to equally spaced points along routes, added in-memory + `localStorage` caching of elevation samples, and a two-pass Gaussian smoothing approach to eliminate meter-quantization steps from Open‑Meteo responses. (Resampling prevents smoothing artifacts and caching reduces API usage.)
 - **Mobile UX:** Fixed MobileBottomSheet drag release by switching to pointer events and using pointer capture/release for robust drag lifecycle handling.
 - **Stability:** Added a top-level `ErrorBoundary` and global error handlers to surface runtime exceptions (prevents white-screen failure mode).
 - **Debugging:** Improved Debug page reliability and made the "Find More Routes" control more robust for manual testing.
-
-### 🔄 Globalization, Wizard & Route Discovery
-- **Globalized search:** Removed Germany-only Nominatim viewbox/country restriction — users can now search global locations.
-- **Removed Departure Time wizard step:** The wizard was simplified to 5 steps (Home → Distance → Activity → Direction → Routes). Transit journeys are now lazy-loaded when a route is selected.
-- **Find More / Generate More:** `calculateRoutes` supports `maxResults` and the UI "Generate More" adds up to `ROUTES_TARGET` more routes per click.
-- **Partial-results UX:** If at least one route is found but additional lookups fail, the app no longer replaces results with a full-page error; it shows a non-blocking amber banner instead. The full-page "No suitable routes" message is shown only when zero routes are found.
-- **Defensive fixes:** distance/duration formatting now handles missing/invalid values safely to avoid runtime exceptions.
-- **Tests:** Added/updated E2E tests for transit directions and Generate More behavior; updated README and docs to reflect flow changes.
 
 ---
 
