@@ -1,41 +1,13 @@
 # Run-Home App - TODO List
 
-> **Last Updated:** January 9, 2026
+> **Last Updated:** January 10, 2026
 > **Priority:** 🔴 High | 🟡 Medium | 🟢 Low
 
 ---
 
 ## ✅ Completed
 
-### MapLibre Migration (Phase 1-3)
-
-- [x] **MapLibreMap component** - Full-page vector map with OpenFreeMap tiles
-- [x] **RouteResults redesign** - Floating route cards with slide-out detail panel
-- [x] **ElevationProfile redesign** - Canvas-based rendering with built-in stats
-- [x] **Removed Leaflet dependency** - MapLibreMap now handles all route display
-- [x] **OSM transit fallback** - Overpass API fallback when Deutsche Bahn API is down
-- [x] **Open-Meteo elevation** - CORS-friendly elevation API (max 50 points per request)
-- [x] **File cleanup** - Removed old *New.jsx files, renamed to default names
-- [x] **Dark mode toggle removed** - Simplified UI
-- [x] **Panel width 35%** - Improved layout
-
-### Bugs Fixed
-
-- [x] **Fix routing setting** - Switched to OSRM.de servers with proper foot/bike profiles
-- [x] **Fix Elevation Profile ↔ Map Hover Sync** - Fixed type checking, added proper pane/key props
-- [x] **Fix excessive re-renders** - Added useCallback, useMemo, memo, fixed useEffect dependencies
-- [x] **Fix routes disappearing** - Fixed useEffect race condition with isCalculatingRef
-- [x] **Fix elevation API reliability** - Switched from Open-Elevation (unreliable) to Open-Meteo (stable)
-- [x] **Fix distance tolerance** - Increased to 30% for more route matches
-
-### Features Implemented
-
-- [x] **Deutsche Bahn API integration** - Real transit data for Germany
-- [x] **Departure time selection** - Date/time picker with quick-select buttons
-- [x] **Improved elevation data** - Using Open-Meteo API (free, reliable)
-- [x] **GPX export with elevation** - Elevation data included in GPX files
-- [x] **Direct route mode** - Fallback when DB API unavailable (generates waypoints by direction)
-- [x] **API availability check** - Background check on startup with graceful degradation
+Completed items are documented in `docs/CHANGELOG.md` — see the Unreleased and versioned entries for details.
 
 ---
 
