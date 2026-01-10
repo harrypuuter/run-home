@@ -68,7 +68,7 @@ The scope of Phase 6 is focused on mobile UX polish, route editing, and performa
 ---
 
 ## 📦 Phase 7 — MapLibre Followups (planned)
-Phase 7 continues the MapLibre redesign with accessibility, performance, and polishing tasks. See `docs/FEATURE_MAPLIBRE_REDESIGN.md` for the full spec and mockups.
+Phase 7 continues the MapLibre redesign with accessibility, performance, and polishing tasks. The design has been implemented — see `docs/finished/FEATURE_MAPLIBRE_REDESIGN.md` for the archived spec and implementation notes.
 
 - [ ] Accessibility audit & keyboard navigation for full-page map and bottom sheet
 - [ ] Performance profiling: lazy-load non-critical layers, debounce expensive updates
@@ -78,7 +78,9 @@ Phase 7 continues the MapLibre redesign with accessibility, performance, and pol
 - [x] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
 
 ### Route Editor ✅ (MVP Complete)
-The Route Editor feature lets users add and remove waypoints to customize routes. See the design doc: `docs/FEATURE_ROUTE_EDITOR.md`.
+The Route Editor design has been implemented — see the archived spec and notes in `docs/finished/FEATURE_ROUTE_EDITOR.md`. 
+
+(Keep the original `docs/FEATURE_ROUTE_EDITOR.md` for historical reference.)
 
 **Completed MVP:**
 - [x] Click-to-add waypoints (insert at nearest route segment)

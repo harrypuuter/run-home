@@ -1,8 +1,13 @@
-# Feature Spec: MapLibre Migration + Full-Page Map Layout
+# Feature Spec: MapLibre Migration + Full-Page Map Layout (Archived)
 
-> **Status:** Draft
+> **Status:** Moved to `docs/finished/FEATURE_MAPLIBRE_REDESIGN.md` (Implemented Jan 10, 2026)
 > **Created:** January 8, 2026
 > **Author:** Copilot + User
+
+---
+
+This document was moved to `docs/finished/FEATURE_MAPLIBRE_REDESIGN.md` to mark the design as implemented. The original content is retained in the archived file for historical reference.
+
 
 ---
 

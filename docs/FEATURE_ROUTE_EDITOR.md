@@ -1,7 +1,8 @@
-# Feature: Route Editor
+# Feature: Route Editor (Archived)
 
-Status: Proposed (January 10, 2026)
+Status: Moved to `docs/finished/FEATURE_ROUTE_EDITOR.md` (Implemented Jan 10, 2026)
 
+This document has been archived and a short implemented-notes copy lives in `docs/finished/FEATURE_ROUTE_EDITOR.md`.
 Summary
 -------
 Provide an inline Route Editor to let users customize suggested routes by adding, moving and removing waypoints. Changes are previewed in real-time (tentative routing & metrics update) while editing, and applied only when the user presses Save.

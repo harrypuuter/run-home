@@ -443,6 +443,7 @@ run-home/
 │   ├── DESIGN.md                 # This document
 │   ├── CHANGELOG.md              # Version history
 │   └── TODO.md                   # Pending tasks
+│   └── finished/                 # Archived implemented design specs (MapLibre, Route Editor)
 │
 ├── public/
 │   ├── favicon.svg
