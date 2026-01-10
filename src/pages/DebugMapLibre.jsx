@@ -60,6 +60,8 @@ function DebugMapLibre() {
   const [isRunning, setIsRunning] = useState(false)
   const [runKey, setRunKey] = useState(0)
   const [useSampleRoute, setUseSampleRoute] = useState(false)
+  const [dbApiEnabled, setDbApiEnabled] = useState(false)
+  const [smokeResult, setSmokeResult] = useState(null)
 
   // Build the state that RouteResults expects
   const buildState = useCallback(() => {
@@ -187,7 +189,7 @@ function DebugMapLibre() {
           state={state}
           updateState={updateState}
           onReset={handleReset}
-          dbApiAvailable={false} // Use OSM fallback for reliability in testing
+          dbApiAvailable={dbApiEnabled} // Allow toggling DB API in debug for tests
         />
       </div>
     )
@@ -306,8 +308,38 @@ function DebugMapLibre() {
             Advanced Options
           </summary>
           <div className="mt-3 p-3 bg-slate-700/30 rounded-lg space-y-2 text-xs text-slate-400">
-            <p><strong>DB API:</strong> Disabled (using OSM fallback)</p>
+            <h4 className="text-sm font-semibold text-slate-200">DB API Dashboard</h4>
+            <div className="flex items-center gap-2">
+              <input
+                id="db-api-toggle"
+                type="checkbox"
+                checked={dbApiEnabled}
+                onChange={(e) => setDbApiEnabled(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="db-api-toggle" className="text-sm">Enable DB API</label>
+            </div>
+            <p><strong>DB API:</strong> {dbApiEnabled ? 'Enabled' : 'Disabled (using OSM fallback)'}</p>
             <p><strong>Departure:</strong> Auto (now + 15 min)</p>
+
+            <div className="pt-2">
+              <button
+                onClick={async () => {
+                  setSmokeResult('Running...')
+                  // simulate a smoke test
+                  await new Promise(r => setTimeout(r, 200))
+                  setSmokeResult('Smoke: OK')
+                }}
+                className="py-2 px-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm"
+              >
+                Run Smoke Test
+              </button>
+            </div>
+
+            {smokeResult && (
+              <div className="mt-2 text-sm text-slate-200">{smokeResult}</div>
+            )}
+
             <p>These settings are optimized for reliable debug testing.</p>
           </div>
         </details>

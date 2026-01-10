@@ -18,10 +18,6 @@ A simple, elegant app that helps runners and cyclists discover outbound routes t
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="/public/screenshots/screenshot-1.png" alt="Route results" width="720" />
-</p>
-
-<p align="center">
   <img src="/public/screenshots/screenshot-2.png" alt="Route detail" width="720" />
 </p>
 

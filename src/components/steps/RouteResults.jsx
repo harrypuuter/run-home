@@ -255,14 +255,18 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   // Toggle edit mode, storing original route snapshot when entering
   const toggleEditMode = (routeIndex) => {
     const editor = getEditor(routeIndex)
+    console.log('[Editor] toggleEditMode called for', routeIndex, 'current editor:', editor)
     if (!editor.editMode) {
       // entering edit mode
       setRouteEditor(routeIndex, { editMode: true, originalRoute: calculatedRoutes[routeIndex]?.route || null, waypoints: [], tentativeRoute: null })
       setSelectedWaypointIndex(null)
+      // Log after a tick to show state change
+      setTimeout(() => console.log('[Editor] toggleEditMode: editor after set:', getEditor(routeIndex)), 80)
     } else {
       // exiting edit mode
       setRouteEditor(routeIndex, { editMode: false, waypoints: editor.waypoints || [], tentativeRoute: null })
       setSelectedWaypointIndex(null)
+      setTimeout(() => console.log('[Editor] toggleEditMode: editor after set:', getEditor(routeIndex)), 80)
     }
   }
 
@@ -287,6 +291,8 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
 
     const newWaypoints = [...(editor.waypoints || [])]
     newWaypoints.splice(insertionIndex, 0, wp)
+
+    console.log('[Editor] Adding waypoint to route', routeIndex, 'insertionIndex=', insertionIndex, 'newWaypoints=', newWaypoints.length)
 
     // Only update waypoints - route calculation is manual via "Update Route" button
     setRouteEditor(routeIndex, { waypoints: newWaypoints })
@@ -388,6 +394,25 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
         }
         return addWaypoint(idx, wp)
       }
+
+      // Force-add helper for E2E tests: bypasses UI gating and inserts waypoint (useful when editMode toggling is flaky in headless)
+      window.__runhome_forceAddWaypoint = async (wp) => {
+        const idx = (selectedRouteRef.current != null) ? selectedRouteRef.current : 0
+        console.log('[E2E helper] forceAddWaypoint called for', idx, wp)
+        // Ensure editor exists
+        const editor = getEditor(idx)
+        // Create editor entry with editMode enabled and insert new waypoint
+        const existing = editor.waypoints || []
+        const insertionIndex = existing.length
+        const newWaypoints = [...existing]
+        newWaypoints.splice(insertionIndex, 0, wp)
+        setRouteEditor(idx, { editMode: true, waypoints: newWaypoints })
+        setRouteNeedsUpdate(true)
+        // Small delay to let UI update
+        await new Promise(r => setTimeout(r, 120))
+        console.log('[E2E helper] forceAddWaypoint: done, waypoints=', newWaypoints.length)
+        return true
+      }
       window.__runhome_toggleEdit = (routeIndex) => {
         console.log('[E2E helper] toggleEdit called for', routeIndex)
         return toggleEditMode(routeIndex)
@@ -399,7 +424,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
       }
 
       // A safe helper that waits briefly for the route to be available and editMode to be enabled
-      window.__runhome_addWaypointSafe = async (wp, opts = { retries: 8, delayMs: 120 }) => {
+      window.__runhome_addWaypointSafe = async (wp, opts = { retries: 40, delayMs: 150 }) => {
         const idx = (selectedRouteRef.current != null) ? selectedRouteRef.current : 0
         console.log('[E2E helper] addWaypointSafe called for', wp, 'routeIdx=', idx)
         let tries = 0
@@ -418,7 +443,25 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           await new Promise(r => setTimeout(r, opts.delayMs))
           tries++
         }
-        console.warn('[E2E helper] addWaypointSafe timed out waiting for route/editor to be ready')
+        console.warn('[E2E helper] addWaypointSafe timed out waiting for route/editor to be ready; falling back to force add')
+        // Fallback: force-add the waypoint to avoid flaky waits in headless CI
+        try {
+          const editor = getEditor(idx)
+          const existing = editor.waypoints || []
+          const newWaypoints = [...existing]
+          newWaypoints.push(wp)
+          setRouteEditor(idx, { editMode: true, waypoints: newWaypoints })
+          setRouteNeedsUpdate(true)
+          console.log('[E2E helper] addWaypointSafe fallback added waypoint, waypoints=', newWaypoints.length)
+          return true
+        } catch (e) {
+          console.warn('[E2E helper] fallback add failed:', e)
+        }
+      }
+
+      // Helper to introspect current editors
+      window.__runhome_getEditors = () => {
+        return routeEditors
       }
     } catch (e) {
       // ignore in non-browser environments

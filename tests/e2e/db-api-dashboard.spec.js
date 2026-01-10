@@ -12,7 +12,7 @@ test('DB API dashboard runs a smoke test and shows results', async ({ page }) =>
   await expect(page.getByText('DB API Dashboard')).toBeVisible()
 
   // Enable DB API toggle
-  const enableToggle = page.locator('input[type="checkbox"]')
+  const enableToggle = page.getByLabel('Enable DB API')
   await enableToggle.check()
 
   // Click Run Smoke Test
