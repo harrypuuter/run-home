@@ -27,6 +27,20 @@ Completed items are documented in `docs/CHANGELOG.md` — see the Unreleased and
 
 ---
 
+## 📦 Phase 6 — MapLibre Redesign: Mobile & Polishing (in-progress)
+The scope of Phase 6 is focused on mobile UX polish, route editing, and performance improvements for the MapLibre redesign. Below are proposed initial tasks; I can start implementing them immediately or adjust based on your priorities.
+
+- [ ] Mobile UX polish: smooth interactions, bottom sheet inertia, ARIA/accessibility improvements
+- [ ] Route editor skeleton: draggable via-points on map, UI for adding/removing points
+- [ ] Performance: lazy-load heavy components, throttle expensive map updates, virtualize long lists
+- [ ] Transit overlay improvements: dashed + glow styles, selective opacity and z-ordering
+- [ ] Add cache eviction/TTL for elevation cache (LRU or time-based expiry)
+- [ ] Visual regression tests: add a simple Playwright/Puppeteer capture for elevation profile to prevent regressions
+
+**Notes:**
+- Marked as **in-progress** in the task tracker; I will start with the mobile UX polish (bottom sheet inertia and accessibility) unless you specify a different priority.
+
+
 ## 🟡 Medium Priority
 
 ### 2. Route Editing
