@@ -99,6 +99,15 @@ export async function fetchOSMTransitStations({ lat, lng, innerRadius = 0, outer
     })
 
     if (!response.ok) {
+      // Try to detect rate-limit responses and throw a distinct error so the UI can surface it
+      let text = ''
+      try { text = await response.text() } catch (e) { text = '' }
+      if (response.status === 429 || /rate|limit|too many requests/i.test(text)) {
+        const err = new Error('Overpass API rate limit exceeded')
+        err.name = 'OverpassRateLimit'
+        throw err
+      }
+
       throw new Error(`Overpass API failed: ${response.status}`)
     }
 
@@ -141,6 +150,11 @@ export async function fetchOSMTransitStations({ lat, lng, innerRadius = 0, outer
     return filtered
 
   } catch (err) {
+    // If Overpass is rate-limiting requests, rethrow to let higher-level code show a helpful message to users
+    if (err && err.name === 'OverpassRateLimit') {
+      throw err
+    }
+
     console.error('[OSM] Failed to fetch transit stations:', err)
     return []
   }
