@@ -54,6 +54,7 @@ export default function RouteDetailPanel({
   selectedWaypointIndex = null,
   waypointError = null,
   routeNeedsUpdate = false,
+  tentativeRoute = null,
   onToggleEdit,
   onRemoveWaypoint,
   onSelectWaypoint,
@@ -103,8 +104,8 @@ export default function RouteDetailPanel({
             <button
               onClick={onToggleShowTransit}
               className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${
-                showTransitOnMap 
-                  ? 'bg-slate-700 text-white' 
+                showTransitOnMap
+                  ? 'bg-slate-700 text-white'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700/50'
               }`}
               aria-pressed={showTransitOnMap}
@@ -161,7 +162,20 @@ export default function RouteDetailPanel({
         {/* Elevation profile */}
         <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
           <h4 className="text-sm font-medium text-slate-300 mb-2">📈 Elevation Profile</h4>
-          <ElevationProfile key={`elevation-${item.stop.id}-${item.route?.distance || 0}`} route={item.route} color={item.color} onHoverPoint={onHoverPoint} height={180} />
+          {routeNeedsUpdate ? (
+            <div className="flex items-center justify-center text-slate-400 text-sm h-[180px]">
+              Update the route to see the elevation profile
+            </div>
+          ) : (
+            <ElevationProfile
+              key={`elevation-${item.stop.id}-${(editMode && tentativeRoute ? tentativeRoute.distance : item.route?.distance) || 0}-${(editMode && tentativeRoute ? tentativeRoute.geometry?.coordinates?.length : item.route?.geometry?.coordinates?.length) || 0}`}
+              route={editMode && tentativeRoute ? tentativeRoute : item.route}
+              color={item.color}
+              onHoverPoint={onHoverPoint}
+              height={180}
+              waypoints={editMode ? waypoints : []}
+            />
+          )}
         </div>
 
         {/* Transit details (only in view mode) */}
@@ -173,23 +187,45 @@ export default function RouteDetailPanel({
         )}
 
         {/* Edit mode: Waypoint editor */}
-        {editMode && (
-          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-            <h4 className="text-sm font-medium text-slate-300 mb-3">📍 Waypoints</h4>
-            <RouteEditor
-              editMode={editMode}
-              waypoints={waypoints}
-              startPoint={item?.stop ? { lat: item.stop.lat, lng: item.stop.lng, name: item.stop.name } : null}
-              endPoint={homeLocation ? { lat: homeLocation.lat, lng: homeLocation.lng, name: 'Home' } : null}
-              selectedWaypointIndex={selectedWaypointIndex}
-              waypointError={waypointError}
-              routeNeedsUpdate={routeNeedsUpdate}
-              onRemoveWaypoint={onRemoveWaypoint}
-              onSelectWaypoint={onSelectWaypoint}
-              onUpdateRoute={onUpdateRoute}
-            />
-          </div>
-        )}
+        {editMode && (() => {
+          // Calculate distances from previous point for each waypoint
+          function haversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000 // meters
+            const dLat = (lat2 - lat1) * Math.PI / 180
+            const dLon = (lon2 - lon1) * Math.PI / 180
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            return R * c
+          }
+          const startPoint = item?.stop ? { lat: item.stop.lat, lng: item.stop.lng, name: item.stop.name } : null
+          let prev = startPoint
+          const waypointDistances = waypoints.map(wp => {
+            if (!prev) return 0
+            const dist = haversineDistance(prev.lat, prev.lng, wp.lat, wp.lng)
+            prev = wp
+            return dist
+          })
+          return (
+            <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+              <h4 className="text-sm font-medium text-slate-300 mb-3">📍 Waypoints</h4>
+              <RouteEditor
+                editMode={editMode}
+                waypoints={waypoints}
+                waypointDistances={waypointDistances}
+                startPoint={startPoint}
+                endPoint={homeLocation ? { lat: homeLocation.lat, lng: homeLocation.lng, name: 'Home' } : null}
+                selectedWaypointIndex={selectedWaypointIndex}
+                waypointError={waypointError}
+                routeNeedsUpdate={routeNeedsUpdate}
+                onRemoveWaypoint={onRemoveWaypoint}
+                onSelectWaypoint={onSelectWaypoint}
+                onUpdateRoute={onUpdateRoute}
+              />
+            </div>
+          )
+        })()}
       </div>
 
       {/* Footer - changes based on edit mode */}

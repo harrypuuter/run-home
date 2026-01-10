@@ -268,7 +268,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
 
     const newWaypoints = [...(editor.waypoints || [])]
     newWaypoints.splice(insertionIndex, 0, wp)
-    
+
     // Only update waypoints - route calculation is manual via "Update Route" button
     setRouteEditor(routeIndex, { waypoints: newWaypoints })
     setRouteNeedsUpdate(true)
@@ -868,6 +868,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
               selectedWaypointIndex={selectedWaypointIndex}
               waypointError={waypointError}
               routeNeedsUpdate={routeNeedsUpdate}
+              tentativeRoute={routeEditors[selectedRouteIndex]?.tentativeRoute}
               onToggleEdit={() => toggleEditMode(selectedRouteIndex)}
               onRemoveWaypoint={(idx) => removeWaypoint(selectedRouteIndex, idx)}
               onSelectWaypoint={selectWaypoint}

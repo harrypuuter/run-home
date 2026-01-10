@@ -6,7 +6,7 @@ import { fetchElevationProfile, calculateElevationStats } from '../services/elev
  * Modern elevation profile component using Canvas for smooth rendering
  * Clean, minimal design that fits the new MapLibre layout
  */
-function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120 }) {
+function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120, waypoints = [] }) {
   console.log('[ElevationProfile] Component rendering, route prop:', route ? 'exists' : 'null/undefined')
 
   const canvasRef = useRef(null)
@@ -82,13 +82,10 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
                     'Valid after interpolation:', validData.length)
 
         if (validData.length < 2) {
-          // If API failed completely, generate synthetic profile based on distance
-          console.warn('[ElevationProfile] No valid elevation data, using flat profile')
-          const syntheticData = data.map(p => ({
-            ...p,
-            elevation: 100, // Flat profile at 100m as fallback
-          }))
-          setProfile(syntheticData)
+          // If API failed completely, show error instead of fallback
+          console.warn('[ElevationProfile] No valid elevation data, API may have failed')
+          setError('Could not load elevation data. The elevation API may be unavailable or blocked.')
+          setProfile(null)
         } else {
           setProfile(validData)
         }
@@ -297,7 +294,45 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
       ctx.lineWidth = 2
       ctx.stroke()
     }
-  }, [profile, height, color, hoveredData])
+    // Draw waypoint markers as vertical lines
+    if (waypoints && waypoints.length > 0 && route?.geometry?.coordinates) {
+      const routeCoords = route.geometry.coordinates
+      waypoints.forEach((wp, wpIndex) => {
+        // Find the closest point on the route to this waypoint
+        let closestDist = Infinity
+        let closestRouteIndex = 0
+        for (let i = 0; i < routeCoords.length; i++) {
+          const [lng, lat] = routeCoords[i]
+          const dist = Math.sqrt(Math.pow(lng - wp.lng, 2) + Math.pow(lat - wp.lat, 2))
+          if (dist < closestDist) {
+            closestDist = dist
+            closestRouteIndex = i
+          }
+        }
+        // Find the corresponding distance in the profile
+        // Profile points are sampled from route, so we need to interpolate
+        const routeProgress = closestRouteIndex / (routeCoords.length - 1)
+        const wpDistance = routeProgress * maxDistance
+        const x = toX(wpDistance)
+        // Draw dashed vertical line
+        ctx.beginPath()
+        ctx.setLineDash([4, 4])
+        ctx.moveTo(x, padding.top)
+        ctx.lineTo(x, height - padding.bottom)
+        ctx.strokeStyle = '#f59e0b' // Amber color matching waypoint markers
+        ctx.lineWidth = 2
+        ctx.stroke()
+        ctx.setLineDash([]) // Reset dash
+        // Draw waypoint number label at top
+        ctx.fillStyle = '#f59e0b'
+        ctx.font = 'bold 10px Inter, system-ui, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'bottom'
+        ctx.fillText(`${wpIndex + 1}`, x, padding.top - 2)
+      })
+    }
+
+  }, [profile, height, color, hoveredData, waypoints, route])
 
   // Handle mouse interaction
   const handleMouseMove = useCallback((e) => {
@@ -362,15 +397,18 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
   }
 
   // Error state
-  if (error || !profile) {
+  if (error) {
     return (
       <div
         className="flex items-center justify-center text-slate-500 text-sm"
         style={{ height }}
       >
-        {error || 'Elevation data unavailable'}
+        {error}
       </div>
     )
+  }
+  if (!profile) {
+    return null
   }
 
   const stats = calculateElevationStats(profile)
