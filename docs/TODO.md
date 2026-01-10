@@ -74,8 +74,21 @@ Phase 7 continues the MapLibre redesign with accessibility, performance, and pol
 - [ ] Performance profiling: lazy-load non-critical layers, debounce expensive updates
 - [ ] Visual polish: route dash animation, glow tuning, and 3D building toggles
 - [ ] Route editor improvements: waypoint snapping and undo/redo
-- [ ] Add visual regression checks for map / elevation rendering
-- [ ] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
+- [x] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
+
+### Route Editor (in progress)
+The Route Editor feature lets users add, move, and remove waypoints to customize routes. See the design doc: `docs/FEATURE_ROUTE_EDITOR.md`.
+
+- [ ] Implement MVP: click-to-add waypoints (insert at nearest route segment), tentative routing & metrics update, Save/Cancel, E2E smoke test (in progress)
+- [ ] Add map drag-to-create waypoint (drag on empty map to create)
+- [ ] Implement draggable waypoint markers and debounced tentative routing
+- [ ] Side-panel waypoint removal (start/end fixed)
+- [ ] Integrate elevation recalculation & update ElevationProfile for tentative route
+- [ ] Accessibility: keyboard interactions for markers and editor controls
+- [ ] Add E2E interaction tests (click-add, drag-add, marker drag, remove)
+- [ ] Enforce max waypoints = 6 and add inline messaging
+- [ ] Performance improvements & limit checks (debounce, caching, TTL for elevation cache)
+- [ ] Undo/Redo and visual polish (phase 2)
 
 **Follow-ups:**
 - [ ] Convert any remaining visual regressions into fast smoke tests where appropriate
