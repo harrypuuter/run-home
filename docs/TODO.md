@@ -72,7 +72,7 @@ Phase 7 continues the MapLibre redesign with accessibility, performance, and pol
 
 - [ ] Accessibility audit & keyboard navigation for full-page map and bottom sheet
 - [ ] Performance profiling: lazy-load non-critical layers, debounce expensive updates
-- [ ] Visual polish: route dash animation, glow tuning, and 3D building toggles
+- [x] Visual polish: route dash animation, glow tuning, and 3D building toggles (done: animated direction indicator on selected route)
 - [ ] Route editor improvements: waypoint snapping and undo/redo
 - [x] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
 
@@ -83,7 +83,10 @@ The Route Editor feature lets users add and remove waypoints to customize routes
 - [x] Click-to-add waypoints (insert at nearest route segment)
 - [x] Manual "Update Route" button with pulse animation on changes
 - [x] Tentative routing & metrics update (distance, duration, calories)
-- [x] Elevation profile refresh after route update
+- [x] Elevation profile refresh after route update (fixed: uses route hash for dependency)
+- [x] Waypoint markers on elevation profile (vertical dashed lines with labels)
+- [x] Distance from previous point shown in waypoint list
+- [x] Directional animation on selected route (station → home direction indicator)
 - [x] Save/Cancel buttons integrated into panel footer
 - [x] Side-panel waypoint removal with numbered labels
 - [x] Enforce max waypoints = 6 with inline messaging

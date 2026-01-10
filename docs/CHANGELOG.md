@@ -1,6 +1,6 @@
 # Run-Home App - Changelog
 
-> **Last Updated:** January 9, 2026
+> **Last Updated:** January 10, 2026
 
 ---
 
@@ -19,7 +19,13 @@
 - **Save/Cancel workflow:** Integrated into RouteDetailPanel footer (replaces Download/Edit in edit mode)
 - **Edit mode indicator:** Subtle map overlay shows when editing is active
 
+#### Visual Enhancements
+- **Directional animation:** Animated dash pattern on selected route showing running direction (station → home)
+- **Waypoint markers in elevation profile:** Vertical dashed lines with numbered labels showing waypoint positions
+- **Distance from previous point:** Waypoint list shows distance from start/previous waypoint for context
+
 #### Code Cleanup & Refactoring
+- Fixed elevation profile not refreshing after route update (improved route hash dependency)
 - Removed drag-to-edit route feature (deferred to Phase 2 for simplicity)
 - Simplified `RouteEditor.jsx` (~100 lines, down from ~200)
 - Integrated edit mode into `RouteDetailPanel.jsx` with conditional UI

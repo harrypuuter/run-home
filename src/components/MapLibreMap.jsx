@@ -215,6 +215,9 @@ function MapLibreMap({
         if (map.current.getLayer(`${sourceId}-line-glow`)) {
           map.current.removeLayer(`${sourceId}-line-glow`)
         }
+        if (map.current.getLayer(`${sourceId}-direction`)) {
+          map.current.removeLayer(`${sourceId}-direction`)
+        }
         if (map.current.getSource(sourceId)) {
           map.current.removeSource(sourceId)
         }
@@ -333,6 +336,25 @@ function MapLibreMap({
           },
         })
 
+        // Add animated direction indicator for selected route
+        if (isSelected) {
+          map.current.addLayer({
+            id: `${sourceId}-direction`,
+            type: 'line',
+            source: sourceId,
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round',
+            },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 2,
+              'line-opacity': 0.6,
+              'line-dasharray': [0, 2, 1],
+            },
+          })
+        }
+
         // Add click handler for route and store for cleanup
         const clickHandler = () => {
           onRouteClick?.(index)
@@ -415,6 +437,48 @@ function MapLibreMap({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routes, selectedRouteIndex, highlightedWaypointIndex, mapLoaded, styleLoaded, marker, onRouteClick, waypointSum, routeDistances, mapRevision])
+
+  // Animate the direction indicator dash pattern for selected route
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !styleLoaded || selectedRouteIndex === null) return
+
+    const directionLayerId = `route-${selectedRouteIndex}-direction`
+    let animationFrame = null
+    let dashOffset = 0
+
+    const animate = () => {
+      if (!map.current || !map.current.getLayer(directionLayerId)) return
+      
+      // Slowly increment the dash offset to create movement
+      dashOffset = (dashOffset + 0.1) % 3
+      
+      try {
+        // Create moving dash pattern: [gap before, dash, gap after]
+        // By shifting these values, we create the illusion of movement
+        const dashArray = [dashOffset, 2, 1 + (3 - dashOffset) % 3]
+        map.current.setPaintProperty(directionLayerId, 'line-dasharray', dashArray)
+      } catch (e) {
+        // Layer might not exist, stop animation
+        return
+      }
+      
+      animationFrame = requestAnimationFrame(animate)
+    }
+
+    // Start animation with a small delay to ensure layer exists
+    const startTimeout = setTimeout(() => {
+      if (map.current?.getLayer(directionLayerId)) {
+        animate()
+      }
+    }, 100)
+
+    return () => {
+      clearTimeout(startTimeout)
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame)
+      }
+    }
+  }, [selectedRouteIndex, mapLoaded, styleLoaded])
 
   // Handle hovered point from elevation profile
   useEffect(() => {

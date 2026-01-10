@@ -6,7 +6,7 @@ import { fetchElevationProfile, calculateElevationStats } from '../services/elev
  * Modern elevation profile component using Canvas for smooth rendering
  * Clean, minimal design that fits the new MapLibre layout
  */
-function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120 }) {
+function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120, waypoints = [] }) {
   console.log('[ElevationProfile] Component rendering, route prop:', route ? 'exists' : 'null/undefined')
 
   const canvasRef = useRef(null)
@@ -18,9 +18,14 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
   // Initialize with a reasonable default width to prevent initial render issues
   const [dimensions, setDimensions] = useState({ width: 300, height })
 
+  // Create a stable identifier for the route to detect changes
+  const routeHash = route?.geometry?.coordinates 
+    ? `${route.distance || 0}-${route.geometry.coordinates.length}-${route.geometry.coordinates[0]?.[0]?.toFixed(4)}-${route.geometry.coordinates[route.geometry.coordinates.length-1]?.[0]?.toFixed(4)}`
+    : null
+
   // Fetch elevation data
   useEffect(() => {
-    console.log('[ElevationProfile] useEffect triggered, route:', route ? 'exists' : 'null')
+    console.log('[ElevationProfile] useEffect triggered, routeHash:', routeHash)
 
     const loadElevation = async () => {
       console.log('[ElevationProfile] loadElevation called')
@@ -101,7 +106,7 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
     }
 
     loadElevation()
-  }, [route])
+  }, [routeHash])
 
   // Handle container resize
   useEffect(() => {
@@ -274,6 +279,49 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
     ctx.textAlign = 'left'
     ctx.fillText('km', width - padding.right + 5, height - padding.bottom + 5)
 
+    // Draw waypoint markers as vertical lines
+    if (waypoints && waypoints.length > 0 && route?.geometry?.coordinates) {
+      const routeCoords = route.geometry.coordinates
+      
+      waypoints.forEach((wp, wpIndex) => {
+        // Find the closest point on the route to this waypoint
+        let closestDist = Infinity
+        let closestRouteIndex = 0
+        
+        for (let i = 0; i < routeCoords.length; i++) {
+          const [lng, lat] = routeCoords[i]
+          const dist = Math.sqrt(Math.pow(lng - wp.lng, 2) + Math.pow(lat - wp.lat, 2))
+          if (dist < closestDist) {
+            closestDist = dist
+            closestRouteIndex = i
+          }
+        }
+        
+        // Find the corresponding distance in the profile
+        // Profile points are sampled from route, so we need to interpolate
+        const routeProgress = closestRouteIndex / (routeCoords.length - 1)
+        const wpDistance = routeProgress * maxDistance
+        const x = toX(wpDistance)
+        
+        // Draw dashed vertical line
+        ctx.beginPath()
+        ctx.setLineDash([4, 4])
+        ctx.moveTo(x, padding.top)
+        ctx.lineTo(x, height - padding.bottom)
+        ctx.strokeStyle = '#f59e0b' // Amber color matching waypoint markers
+        ctx.lineWidth = 2
+        ctx.stroke()
+        ctx.setLineDash([]) // Reset dash
+        
+        // Draw waypoint number label at top
+        ctx.fillStyle = '#f59e0b'
+        ctx.font = 'bold 10px Inter, system-ui, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'bottom'
+        ctx.fillText(`${wpIndex + 1}`, x, padding.top - 2)
+      })
+    }
+
     // Draw hover point if exists
     if (hoveredData && hoveredData.index >= 0 && hoveredData.index < profile.length) {
       const point = profile[hoveredData.index]
@@ -297,7 +345,7 @@ function ElevationProfile({ route, color = '#3b82f6', onHoverPoint, height = 120
       ctx.lineWidth = 2
       ctx.stroke()
     }
-  }, [profile, height, color, hoveredData])
+  }, [profile, height, color, hoveredData, waypoints, route])
 
   // Handle mouse interaction
   const handleMouseMove = useCallback((e) => {
