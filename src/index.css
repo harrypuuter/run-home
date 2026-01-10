@@ -86,6 +86,13 @@ body {
   animation: slide-out-right 0.3s ease-in forwards;
 }
 
+/* Sheet transition for smoother snap animations when not dragging */
+.sheet-transition {
+  transition: transform 320ms cubic-bezier(0.22, 0.8, 0.2, 1);
+}
+
+.touch-none { touch-action: none; }
+
 /* MapLibre popup styles - must override library defaults */
 .maplibregl-popup-content {
   background: rgb(30 41 59 / 0.95) !important;

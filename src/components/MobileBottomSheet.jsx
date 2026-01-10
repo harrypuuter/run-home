@@ -56,10 +56,15 @@ export default function MobileBottomSheet({
   const draggingRef = useRef(false)
 
   // Start drag
+  const [isDraggingState, setIsDraggingState] = useState(false)
+  const lastPositionsRef = useRef([]) // [{t, y}]
+
   const startDrag = useCallback((clientY) => {
     startYRef.current = clientY
     startTranslateRef.current = translateY
     draggingRef.current = true
+    setIsDraggingState(true)
+    lastPositionsRef.current = [{ t: performance.now(), y: clientY }]
     document.body.style.userSelect = 'none'
   }, [translateY])
 
@@ -68,14 +73,52 @@ export default function MobileBottomSheet({
     const dy = clientY - startYRef.current
     const next = Math.max(0, Math.min(sheetStates.current.peek, startTranslateRef.current + dy))
     setTranslateY(next)
+
+    // Record recent positions for velocity calculation (keep short history)
+    const now = performance.now()
+    lastPositionsRef.current.push({ t: now, y: clientY })
+    // Keep last 6 samples or last 150ms
+    while (lastPositionsRef.current.length > 6 || (now - lastPositionsRef.current[0].t) > 150) {
+      lastPositionsRef.current.shift()
+    }
   }, [])
 
   const endDrag = useCallback(() => {
     if (!draggingRef.current) return
     draggingRef.current = false
+    setIsDraggingState(false)
     pointerIdRef.current = null
     document.body.style.userSelect = ''
-    // Snap to closest state
+
+    // Compute velocity (px per ms)
+    const samples = lastPositionsRef.current
+    let velocity = 0
+    if (samples.length >= 2) {
+      const first = samples[0]
+      const last = samples[samples.length - 1]
+      const dy = last.y - first.y
+      const dt = Math.max(1, last.t - first.t)
+      velocity = dy / dt // px / ms
+    }
+
+    // Fling thresholds (tweakable)
+    const FLING_VELOCITY_PX_PER_MS = 0.6 // ~0.6 px/ms
+    const FLING_MIN_DISTANCE = sheetStates.current.peek * 0.05 // require small movement relevance
+
+    // Decide based on velocity first (fast gestures)
+    if (velocity < -FLING_VELOCITY_PX_PER_MS) {
+      // Fast upward swipe -> open fully
+      setTranslateY(sheetStates.current.full)
+      return
+    }
+    if (velocity > FLING_VELOCITY_PX_PER_MS) {
+      // Fast downward swipe -> close to peek
+      setTranslateY(sheetStates.current.peek)
+      onClose?.()
+      return
+    }
+
+    // Otherwise snap to nearest state (index-based)
     const distances = [
       { name: 'full', value: sheetStates.current.full },
       { name: 'half', value: sheetStates.current.half },
@@ -136,8 +179,38 @@ export default function MobileBottomSheet({
     }
   }
 
+  // Keyboard accessibility for the handle
+  const onHandleKeyDown = (e) => {
+    if (e.key === 'ArrowUp') {
+      setTranslateY(sheetStates.current.full)
+      e.preventDefault()
+    } else if (e.key === 'ArrowDown') {
+      setTranslateY(sheetStates.current.peek)
+      onClose?.()
+      e.preventDefault()
+    } else if (e.key === 'Home') {
+      setTranslateY(sheetStates.current.full)
+      e.preventDefault()
+    } else if (e.key === 'End') {
+      setTranslateY(sheetStates.current.peek)
+      onClose?.()
+      e.preventDefault()
+    } else if (e.key === 'Escape') {
+      setTranslateY(sheetStates.current.peek)
+      onClose?.()
+      e.preventDefault()
+    } else if (e.key === ' ' || e.key === 'Enter') {
+      // Toggle between half and full
+      const half = sheetStates.current.half
+      const full = sheetStates.current.full
+      setTranslateY(prev => (prev === full ? half : full))
+      e.preventDefault()
+    }
+  }
+
   const sheetStyle = {
     transform: `translateY(${translateY}px)`,
+    transition: isDraggingState ? 'none' : 'transform 320ms cubic-bezier(0.22, 0.8, 0.2, 1)'
   }
 
   const selectedItem = selectedRouteIndex !== null ? routes[selectedRouteIndex] : null
@@ -158,6 +231,10 @@ export default function MobileBottomSheet({
           ref={handleRef}
           className="w-full py-2 flex items-center justify-center cursor-grab touch-none"
           onPointerDown={onPointerDown}
+          onKeyDown={onHandleKeyDown}
+          role="button"
+          tabIndex={0}
+          aria-label="Drag to expand or collapse routes"
           style={{ touchAction: 'none' }}
         >
           <div className="w-12 h-1.5 bg-slate-700 rounded-full" />
