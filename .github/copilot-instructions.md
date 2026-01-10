@@ -59,6 +59,28 @@ Notes:
 - If tests fail due to viewport/layout (mobile vs desktop), make E2E tests explicitly set `page.setViewportSize(...)` or use a mobile device preset to avoid environment-dependent flakiness.
 - When reproducing CI failures locally, match the Node/npm versions used in CI (workflow uses Node 20) and run `npx playwright install --with-deps` before running tests to ensure browsers are available.
 
+Upload artifact warning: "No files were found with the provided path: playwright-report/"
+- Cause: Playwright did not generate an HTML report directory (`playwright-report/`). Common reasons:
+  - The Playwright runner was invoked without an HTML reporter (e.g., `--reporter=list` only).
+  - Tests passed but the reporter wasn't configured to write the report.
+- Fix: ensure Playwright produces the HTML report and set reporters in `playwright.config.js` (example):
+
+  ```js
+  // playwright.config.js
+  export default {
+    reporter: [['list'], ['html', { open: 'never' }]],
+    use: {
+      trace: 'on-first-retry',
+      screenshot: 'only-on-failure',
+    }
+  }
+  ```
+
+- Alternatively, run the test command in CI with an HTML reporter:
+  `npx playwright test --reporter=list --reporter=html`
+
+- Note: artifact downloads via API may require admin access; if you see a 403 when downloading logs or the report, use the web UI or ask an admin to retrieve the `playwright-report/` artifact for the failing run.
+
 What good tests look like here
 - E2E tests that exercise the debug page for deterministic behavior (see `tests/e2e/bottom-sheet.spec.js`).
 - When changing the algorithm (RouteResults): add an E2E test that uses `DebugMapLibre` to verify at least one successful route is produced for a known test location.

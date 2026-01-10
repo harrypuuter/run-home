@@ -528,8 +528,6 @@ Helpful running context pulled from OpenStreetMap/Overpass:
 - [x] Animations and transitions (started: route selection transitions and card scale)
 - [ ] Loading states
 - [ ] Error handling
-- [ ] Accessibility (keyboard nav, screen readers)
-- [ ] Dark mode toggle
 
 ### Phase 7: Additional Info (Nice-to-Have)
 - [ ] Surface type from OSM

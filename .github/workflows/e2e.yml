@@ -28,7 +28,7 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Run Playwright tests
-        run: npx playwright test --config=playwright.config.js --reporter=list
+        run: npx playwright test --config=playwright.config.js --reporter=list --reporter=html
         env:
           CI: "true"
 
