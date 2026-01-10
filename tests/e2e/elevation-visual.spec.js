@@ -20,7 +20,7 @@ test('elevation profile visual regression', async ({ page }) => {
   }
 
   // Wait for the elevation canvas to be present and painted
-  const canvasSelector = 'div.relative canvas'
+  const canvasSelector = 'canvas[data-testid="elevation-canvas"]'
   await page.waitForSelector(canvasSelector, { timeout: 30000 })
 
   // Wait until the canvas has non-empty image data (toDataURL length check)
@@ -39,8 +39,9 @@ test('elevation profile visual regression', async ({ page }) => {
   const canvas = page.locator(canvasSelector).first()
 
   // Wait a moment to allow final paints/gradients
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(1000)
 
   // Match screenshot (Playwright will store snapshot under test-results by default)
-  await expect(canvas).toHaveScreenshot('elevation-profile.png')
+  // Increase timeout for CI runners where rendering may be slower
+  await expect(canvas).toHaveScreenshot('elevation-profile.png', { timeout: 30000 })
 })
