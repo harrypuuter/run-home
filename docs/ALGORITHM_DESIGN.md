@@ -22,7 +22,6 @@ The wizard collects the following inputs:
 | `distance` | `number` (km) | `10` |
 | `activity` | `'run' \| 'bike'` | `'run'` |
 | `direction` | `'north' \| 'east' \| 'south' \| 'west' \| 'any'` | `'any'` |
-| `departureTime` | `Date` | `2026-01-09T15:00:00` |
 
 ---
 
@@ -221,14 +220,15 @@ const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=
 
 ```javascript
 if (dbApiAvailable) {
+  // Lazy-load transit journeys only when a route is selected. No departure time is required by default.
   const journey = await findJourneys({
     from: home,
     to: startPoint,
-    departure: departureTime,
   })
   // Display in detail panel
 }
 // If unavailable: silently skip, no error shown
+// Note: transit lookup is optional and performed on-demand to avoid slowing the main route discovery flow.
 ```
 
 ---
@@ -282,19 +282,25 @@ User Inputs
 
 ## Current vs. Proposed Implementation
 
-### Current Issues:
+### Current Issues (now addressed):
 
-1. **Dual API for start points**: Tries DB API first, then OSM. Redundant.
-2. **generateDirectRouteWaypoints**: Creates fake waypoints when APIs fail. Over-engineered.
-3. **Transit fetched during route calculation**: Adds latency to main flow.
-4. **Complex state management**: Multiple refs tracking calculation state.
+1. **Dual API for start points**: Previously tried DB API first then OSM; start point discovery now uses OSM Overpass only.
+2. **generateDirectRouteWaypoints**: Removed — the algorithm no longer fabricates waypoints when APIs fail.
+3. **Transit fetched during route calculation**: Transit lookup now happens lazily on route selection to avoid slowing route discovery.
+4. **Complex state management**: State was simplified in `RouteResults.jsx` with clearer lifecycle and error handling.
 
-### Proposed Simplifications:
+### Simplifications implemented:
 
 1. **Single API for start points**: OSM Overpass only (more reliable, no API key)
-2. **Remove waypoint generation**: If no stations found, show "no routes" message
-3. **Defer transit to selection**: Only fetch when user clicks a route
-4. **Cleaner state**: Single source of truth for routes
+2. **Remove waypoint generation**: If no stations found, show a helpful message or allow users to expand search
+3. **Defer transit to selection**: Only fetch when user clicks a route (lazy)
+4. **Cleaner state**: Single source of truth for routes; improved error handling and logging
+
+Additional implemented improvements:
+- Globalized Nominatim search (removed Germany-only restriction)
+- `calculateRoutes` supports `maxResults` and "Generate More" adds routes in batches
+- Improved error UX: non-blocking banner for transient errors, full-page error only when zero routes found
+- Defensive formatting for missing or invalid distances/durations to avoid crashes
 
 ---
 
@@ -308,8 +314,14 @@ User Inputs
 - [x] Remove Deutsche Bahn dependency for start point discovery
 - [x] Implement adaptive tolerance (10% → 20% → 30%)
 - [x] Update to 5 routes target
+- [x] Remove departure-time step from the wizard and related UI
+- [x] Remove Germany-only Nominatim restriction (global search)
+- [x] Add `maxResults` support to `calculateRoutes` and implement "Generate More" behavior
+- [x] Suppress full-page "No suitable routes" error when partial routes exist (show non-blocking banner)
+- [x] Defensive fixes for `formatDistance` / `formatDuration` to avoid runtime exceptions
+- [x] Update and add E2E tests for transit links and generate-more behavior
 - [ ] Add proper caching for elevation data
-- [ ] Update tests
+- [ ] Finish testing and address unrelated flaky E2E tests
 
 ---
 

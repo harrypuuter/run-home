@@ -2,19 +2,18 @@ import ProgressBar from './ProgressBar'
 import HomeLocation from './steps/HomeLocation'
 import DistanceSelect from './steps/DistanceSelect'
 import ActivitySelect from './steps/ActivitySelect'
-import DepartureTime from './steps/DepartureTime'
+
 import DirectionSelect from './steps/DirectionSelect'
 import RouteResults from './steps/RouteResults'
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 5
 
 const STEP_TITLES = {
   1: 'Set Your Home Location',
   2: 'Choose Distance',
   3: 'Choose Activity',
-  4: 'When do you want to travel?',
-  5: 'Choose Direction',
-  6: 'Your Routes',
+  4: 'Choose Direction',
+  5: 'Your Routes',
 }
 
 function Wizard({ state, updateState, goToStep, nextStep, prevStep, resetWizard, dbApiAvailable }) {
@@ -50,15 +49,6 @@ function Wizard({ state, updateState, goToStep, nextStep, prevStep, resetWizard,
         )
       case 4:
         return (
-          <DepartureTime
-            departureTime={state.departureTime}
-            onUpdate={(departureTime) => updateState({ departureTime })}
-            onNext={nextStep}
-            onBack={prevStep}
-          />
-        )
-      case 5:
-        return (
           <DirectionSelect
             direction={state.direction}
             onUpdate={(direction) => updateState({ direction })}
@@ -66,7 +56,7 @@ function Wizard({ state, updateState, goToStep, nextStep, prevStep, resetWizard,
             onBack={prevStep}
           />
         )
-      case 6:
+      case 5:
         return (
           <RouteResults
             state={state}
@@ -81,7 +71,7 @@ function Wizard({ state, updateState, goToStep, nextStep, prevStep, resetWizard,
   }
 
   // RouteResults renders full-page, bypass the card wrapper
-  if (currentStep === 6) {
+  if (currentStep === 5) {
     return renderStep()
   }
 

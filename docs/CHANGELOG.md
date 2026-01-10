@@ -41,6 +41,14 @@
 - **Stability:** Added a top-level `ErrorBoundary` and global error handlers to surface runtime exceptions (prevents white-screen failure mode).
 - **Debugging:** Improved Debug page reliability and made the "Find More Routes" control more robust for manual testing.
 
+### 🔄 Globalization, Wizard & Route Discovery
+- **Globalized search:** Removed Germany-only Nominatim viewbox/country restriction — users can now search global locations.
+- **Removed Departure Time wizard step:** The wizard was simplified to 5 steps (Home → Distance → Activity → Direction → Routes). Transit journeys are now lazy-loaded when a route is selected.
+- **Find More / Generate More:** `calculateRoutes` supports `maxResults` and the UI "Generate More" adds up to `ROUTES_TARGET` more routes per click.
+- **Partial-results UX:** If at least one route is found but additional lookups fail, the app no longer replaces results with a full-page error; it shows a non-blocking amber banner instead. The full-page "No suitable routes" message is shown only when zero routes are found.
+- **Defensive fixes:** distance/duration formatting now handles missing/invalid values safely to avoid runtime exceptions.
+- **Tests:** Added/updated E2E tests for transit directions and Generate More behavior; updated README and docs to reflect flow changes.
+
 ---
 
 ## Version 0.4.0 (January 9, 2026) - Algorithm Rework & UI Polish

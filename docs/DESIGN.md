@@ -1,8 +1,8 @@
 # Run-Home App - Design Document
 
-> **Version:** 1.1
-> **Date:** January 8, 2026
-> **Status:** In Development (POC)
+> **Version:** 1.2
+> **Date:** January 10, 2026
+> **Status:** Stabilized — Updated to reflect current flow
 
 **Related Documents:**
 - [CHANGELOG.md](./CHANGELOG.md) - Version history and session notes
@@ -19,7 +19,7 @@ Run-Home is a web application that helps runners and cyclists plan their journey
 - Runners who want to incorporate their commute into training
 - Cyclists looking for scenic routes home
 - People who want to exercise while commuting
-- European users (initial market focus)
+- Global users (no region restriction)
 
 ### 1.3 Key Features
 - Set home/endpoint location via map or search
@@ -30,7 +30,7 @@ Run-Home is a web application that helps runners and cyclists plan their journey
 - View and compare multiple route options
 - **[NEW]** Interactive elevation profile with hover synchronization
 - **[NEW]** GPX export for use in GPS devices/apps
-- **[NEW]** Public transit directions for each route
+- **[NEW]** Transit-aware routing: transit connections are shown when available (lazy-loaded per route) 
 
 ---
 
@@ -132,8 +132,7 @@ Run-Home is a web application that helps runners and cyclists plan their journey
 - **Desktop:** Click on map is primary, search bar as alternative
 
 **Validation:**
-- Location must be within Europe
-- Coordinates must be valid
+- Coordinates must be valid (no regional restriction)
 
 **Persistence:** Home location saved to localStorage
 
@@ -200,34 +199,7 @@ Run-Home is a web application that helps runners and cyclists plan their journey
 
 ---
 
-### Step 4: Select Departure Time
-**Purpose:** Set when you want to travel (for transit scheduling)
 
-**UI Elements:**
-- Date picker (calendar)
-- Time picker (hour:minute)
-- Quick-select buttons:
-  - "Now"
-  - "In 30 min"
-  - "In 1 hour"
-  - "Tomorrow 8:00"
-  - "Tomorrow 18:00"
-
-**Behavior:**
-- Time is rounded to nearest 5 minutes
-- Default: 15 minutes from now
-- Used by Deutsche Bahn API to find transit connections
-
-**Validation:**
-- Departure time must be in the future
-- Maximum: 7 days ahead (DB API limitation)
-
-**State Output:**
-```javascript
-{
-  departureTime: new Date() // JavaScript Date object
-}
-```
 
 ---
 
@@ -278,7 +250,7 @@ function calculateBearing(homeLat, homeLng, stopLat, stopLng) {
 
 ---
 
-### Step 6: View Routes
+### Step 5: View Routes
 **Purpose:** Display matching transit stops and routes back home
 
 **UI Elements:**
@@ -289,11 +261,11 @@ function calculateBearing(homeLat, homeLng, stopLat, stopLng) {
    - **[NEW]** Hovered point marker (synced with elevation profile)
 
 2. **Route list panel (scrollable cards):**
-   - Shows 3 routes at a time with "Generate More" button
+   - Shows **5 routes** at a time (configurable `ROUTES_TARGET = 5`) with a "Generate More" button that loads the next batch of up to 5 results
    - Each route card shows:
      - Transit stop name with type icon
      - Route distance and estimated duration
-     - **[NEW]** Public transit directions (lines, destinations)
+     - **[NEW]** Public transit directions (lines, destinations) shown when available
      - **[NEW]** Transit line badges with colors
    - Click to expand route card and highlight on map
 
@@ -304,7 +276,7 @@ function calculateBearing(homeLat, homeLng, stopLat, stopLng) {
    - Activity type reminder
 
 4. **Actions:**
-   - "Generate More Routes" → Show different stops
+   - "Generate More Routes" → Request additional routes by increasing `maxResults` (adds up to `ROUTES_TARGET` more)
    - "Start Over" button → Return to Step 1
    - **[NEW]** "Download GPX" → Export for GPS devices
 
@@ -312,10 +284,15 @@ function calculateBearing(homeLat, homeLng, stopLat, stopLng) {
 1. Query Overpass API for transit stops matching criteria
 2. Filter stops by direction (bearing from home), unless "Any" selected
 3. Calculate routes via OSRM (foot or bike profile)
-4. Filter routes by distance tolerance (±15%)
-5. Fetch transit line info for each stop
+4. Filter routes by distance tolerance (±10% → ±20% → ±30% adaptive)
+5. Fetch transit line info when available; transit journeys are fetched lazily on route selection
 6. **[NEW]** Fetch elevation profile when route is selected
-7. Show only 3 routes at a time for performance
+7. Show up to `ROUTES_TARGET` (default 5) routes initially; "Generate More" fetches additional batches
+
+**Error handling & UX notes:**
+- If partial routes exist but additional data calls fail or time out, show a non-blocking amber banner rather than replacing the results with a full-page error.
+- Only show the full-page "No suitable routes" message when zero routes are found after the full search/generation process.
+- Distance/duration formatting is defensive and will show a placeholder (`--`) when values are missing or invalid.
 
 **State Output:**
 ```javascript
@@ -480,7 +457,7 @@ run-home/
     ├── services/
     │   ├── deutschebahn.js       # DB REST API (transit stops + journeys)
     │   ├── osrm.js               # Route calculation (OSRM.de)
-    │   ├── nominatim.js          # Geocoding (Germany only)
+    │   ├── nominatim.js          # Geocoding (global)
     │   ├── geo.js                # Bearing, distance utils
     │   ├── elevation.js          # Elevation profile (Open-Meteo API)
     │   └── gpx.js                # GPX file generation with elevation
@@ -511,13 +488,10 @@ const [wizardState, setWizardState] = useState({
   // Step 3: Activity
   activity: 'run', // 'run' | 'bike'
 
-  // Step 4: Departure Time (replaces Transit Types)
-  departureTime: getDefaultDepartureTime(), // Date object
-
-  // Step 5: Direction
+  // Step 4: Direction
   direction: null, // 'north' | 'east' | 'south' | 'west' | 'any'
 
-  // Step 6 (computed)
+  // Computed / Result state
   transitStops: [],
   routes: [],
   routeCache: {}, // Cache: { [stopId]: routeData }
@@ -525,13 +499,7 @@ const [wizardState, setWizardState] = useState({
   error: null,
 });
 
-// Default departure time: now + 15 min, rounded to 5 min
-function getDefaultDepartureTime() {
-  const now = new Date();
-  now.setMinutes(Math.ceil(now.getMinutes() / 5) * 5 + 15);
-  now.setSeconds(0);
-  return now;
-}
+
 ```
 
 ### 5.2 Step Validation
@@ -540,8 +508,8 @@ const canProceed = {
   1: () => wizardState.homeLocation !== null,
   2: () => wizardState.distance >= 2 && wizardState.distance <= 150,
   3: () => ['run', 'bike'].includes(wizardState.activity),
-  4: () => wizardState.departureTime instanceof Date,
-  5: () => ['north', 'east', 'south', 'west', 'any'].includes(wizardState.direction),
+  4: () => ['north', 'east', 'south', 'west', 'any'].includes(wizardState.direction),
+  5: () => true, // Routes page - no input required to display results
 };
 ```
 

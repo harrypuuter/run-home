@@ -166,6 +166,7 @@ function Map({
   hoveredPoint = null, // Point from elevation profile hover
   onClick,
   className = 'h-64 w-full',
+  departureTime = null,
 }) {
   // Get the color of the selected route for the hovered point marker
   const selectedRouteColor = selectedRouteIndex !== null && routes[selectedRouteIndex]
@@ -266,6 +267,18 @@ function Map({
               <strong>{item.stop.name || 'Unnamed Stop'}</strong>
               <br />
               <span className="text-slate-500 capitalize">{item.stop.type}</span>
+              {marker && (
+                <div className="mt-1">
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&origin=${marker[0]},${marker[1]}&destination=${item.stop.lat},${item.stop.lng}&travelmode=transit`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-sky-400 hover:text-sky-300"
+                  >
+                    🚆 Transit directions (Home → Stop)
+                  </a>
+                </div>
+              )}
             </div>
           </Popup>
         </Marker>

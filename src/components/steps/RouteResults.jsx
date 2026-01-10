@@ -203,6 +203,25 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
 
   const { homeLocation, distance, activity, departureTime, direction, isLoading, error } = state
 
+  // Message substring that indicates no routes found; used to suppress logging/UI for partial results
+  const IGNORE_NO_ROUTES_SUBSTR = 'No suitable routes found'
+
+  // Debug logging: surface when the global error flag changes so we can trace unexpected transitions.
+  // NOTE: Do not log the 'No suitable routes' message when we already have at least one route —
+  // that situation is expected (partial results) and should not appear as an error in logs.
+  useEffect(() => {
+    if (error) {
+      // Ignore the 'no routes' message when we have some routes available (partial success)
+      if (typeof error === 'string' && error.toLowerCase().includes(IGNORE_NO_ROUTES_SUBSTR.toLowerCase()) && calculatedRoutes.length > 0) {
+        return
+      }
+      console.warn('[RouteResults] Global error set:', error, 'calculatedRoutes:', calculatedRoutes.length)
+    } else {
+      // Only log clears when we previously had routes (helpful to detect transient clears)
+      if (calculatedRoutes.length > 0) console.log('[RouteResults] Global error cleared (routes available)')
+    }
+  }, [error, calculatedRoutes.length])
+
   // Keep a ref to the currently selected route index so test helpers and async
   // closures can act on the most-recent selection without stale closures.
   const selectedRouteRef = useRef(null)
@@ -488,7 +507,10 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   // ============================================
   // STEP 3: Calculate routes with adaptive tolerance
   // ============================================
-  const calculateRoutes = useCallback(async (candidates, toleranceLevel) => {
+  // Added optional maxResults param so callers (eg. Find More) can request more than the
+  // default ROUTES_TARGET in subsequent runs. Defaults to ROUTES_TARGET for the initial
+  // search to preserve prior behavior.
+  const calculateRoutes = useCallback(async (candidates, toleranceLevel, maxResults = ROUTES_TARGET) => {
     if (isCalculatingRef.current) return
     isCalculatingRef.current = true
     setCalculatingRoutes(true)
@@ -496,14 +518,14 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
     setSearchPhase(`Calculating routes (±${(toleranceLevel + 1) * 10}% tolerance)...`)
 
     const { min: minDistance, max: maxDistance, tolerance } = getDistanceTolerance(distance, toleranceLevel)
-    console.log('[Algorithm] Tolerance level', toleranceLevel, '- range:', minDistance, '-', maxDistance, 'm')
+    console.log('[Algorithm] Tolerance level', toleranceLevel, '- range:', minDistance, '-', maxDistance, 'm', 'maxResults:', maxResults)
 
     const validRoutes = [...calculatedRoutes]
     let attempts = 0
 
     for (const candidate of candidates) {
-      // Stop if we have enough routes
-      if (validRoutes.length >= ROUTES_TARGET) break
+      // Stop if we have enough routes for this run
+      if (validRoutes.length >= maxResults) break
       // Stop if we've tried too many
       if (attempts >= MAX_CANDIDATES_PER_PASS) break
       // Skip already checked candidates
@@ -547,14 +569,21 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
     setSearchPhase('')
     isCalculatingRef.current = false
 
-    // If we don't have enough routes and can relax tolerance, try again
-    if (validRoutes.length < ROUTES_TARGET && toleranceLevel < TOLERANCE_LEVELS.length - 1) {
-      console.log('[Algorithm] Not enough routes, relaxing tolerance...')
+    // Clear any previous error if we found at least one valid route
+    if (validRoutes.length > 0) {
+      updateState({ error: null })
+    }
+
+    // If we don't have enough routes to satisfy maxResults and can relax tolerance, try again
+    if (validRoutes.length < maxResults && toleranceLevel < TOLERANCE_LEVELS.length - 1) {
+      console.log('[Algorithm] Not enough routes for this run, relaxing tolerance...')
       // Small delay before retrying with looser tolerance
       setTimeout(() => {
-        calculateRoutes(candidates, toleranceLevel + 1)
+        calculateRoutes(candidates, toleranceLevel + 1, maxResults)
       }, 100)
-    } else if (validRoutes.length === 0) {
+    } else if (validRoutes.length === 0 && calculatedRoutes.length === 0) {
+      // Only set the global error when we truly have no routes at all (avoid overwriting
+      // existing partial results with an error from a later pass)
       updateState({ error: 'No suitable routes found. Try adjusting your distance or direction.' })
     }
   }, [calculatedRoutes, distance, homeLocation, activity, updateState])
@@ -638,11 +667,13 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
   }, [homeLocation, activity])
 
   const handleGenerateMore = useCallback(async () => {
-    console.log('[RouteResults] Find More clicked - calculatingRoutes:', calculatingRoutes, 'candidates left:', candidatesRef.current.length)
+    console.log('[RouteResults] Find More clicked - calculatingRoutes:', calculatingRoutes, 'candidates left:', candidatesRef.current.length, 'current routes:', calculatedRoutes.length)
     if (calculatingRoutes || isCalculatingRef.current) return
     // Continue calculating with remaining candidates at current tolerance
-    calculateRoutes(candidatesRef.current, currentTolerance)
-  }, [calculatingRoutes, calculateRoutes, currentTolerance])
+    // Request an additional batch equal to ROUTES_TARGET (e.g., +5 results)
+    const target = calculatedRoutes.length + ROUTES_TARGET
+    calculateRoutes(candidatesRef.current, currentTolerance, target)
+  }, [calculatingRoutes, calculateRoutes, currentTolerance, calculatedRoutes.length])
 
   const hasMoreCandidates = candidatesRef.current.some(c => !checkedCandidatesRef.current.has(c.id))
   const [showTransitOnMap, setShowTransitOnMap] = useState(false)
@@ -721,8 +752,10 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
     )
   }
 
-  // Error state
-  if (error) {
+  // Error state: only show the full-page error if there are NO calculated routes. If we have
+  // at least one route, keep showing the routes and surface the error non-blocking in the
+  // UI (to avoid replacing working results with an error banner due to transient issues).
+  if (error && calculatedRoutes.length === 0) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-slate-900 p-4">
         <div className="max-w-md w-full bg-slate-800 rounded-2xl p-6 space-y-4">
@@ -758,6 +791,20 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
         <div className="w-20" /> {/* Spacer for centering */}
       </div>
 
+      {/* Non-blocking error banner: if we have routes but an error occurred (transient), show a banner */}
+      {error && calculatedRoutes.length > 0 && !(typeof error === 'string' && error.toLowerCase().includes(IGNORE_NO_ROUTES_SUBSTR.toLowerCase())) && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30">
+          <div className="bg-amber-700 text-amber-100 px-4 py-2 rounded-lg shadow-md flex items-center gap-3">
+            <AlertTriangle className="w-4 h-4" />
+            <div className="text-sm">{error}</div>
+            <div className="ml-4 flex gap-2">
+              <Button variant="ghost" onClick={() => window.location.reload()} className="!px-2 !py-1">Retry</Button>
+              <Button variant="secondary" onClick={onReset} className="!px-2 !py-1">Start Over</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <div className="flex-1 flex relative overflow-hidden">
         {/* Full-page Map */}
@@ -778,6 +825,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
           onAddWaypoint={(wp) => {
             if (selectedRouteIndex !== null) addWaypoint(selectedRouteIndex, wp)
           }}
+          departureTime={departureTime}
         />
 
 
@@ -862,6 +910,7 @@ function RouteResults({ state, updateState, onReset, dbApiAvailable }) {
               onToggleShowTransit={() => setShowTransitOnMap(s => !s)}
               dbApiAvailable={dbApiAvailable}
               homeLocation={homeLocation}
+              wizardDepartureTime={departureTime}
               // Editor props
               editMode={routeEditors[selectedRouteIndex]?.editMode}
               waypoints={routeEditors[selectedRouteIndex]?.waypoints || []}

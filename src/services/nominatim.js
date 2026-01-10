@@ -1,10 +1,7 @@
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 
-// Germany bounding box (SW corner to NE corner: minLon,minLat,maxLon,maxLat)
-const GERMANY_VIEWBOX = '5.87,47.27,15.04,55.06'
-
 /**
- * Search for locations using Nominatim API (restricted to Germany)
+ * Search for locations using Nominatim API
  * @param {string} query - Search query
  * @returns {Promise<Array>} - Array of location results
  */
@@ -14,9 +11,6 @@ export async function searchLocation(query) {
     format: 'json',
     limit: '5',
     addressdetails: '1',
-    viewbox: GERMANY_VIEWBOX,
-    bounded: '1',
-    countrycodes: 'de', // Restrict to Germany
   })
 
   const response = await fetch(`${NOMINATIM_URL}?${params}`, {

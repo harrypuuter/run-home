@@ -149,7 +149,7 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-// Germany bounding box (approximate)
+// Germany bounding box (approximate) — retained for reference
 export const GERMANY_BOUNDS = {
   minLat: 47.27,
   maxLat: 55.06,
@@ -157,17 +157,8 @@ export const GERMANY_BOUNDS = {
   maxLng: 15.04,
 }
 
-/**
- * Check if coordinates are within Germany
- */
-export function isInGermany(lat, lng) {
-  return (
-    lat >= GERMANY_BOUNDS.minLat &&
-    lat <= GERMANY_BOUNDS.maxLat &&
-    lng >= GERMANY_BOUNDS.minLng &&
-    lng <= GERMANY_BOUNDS.maxLng
-  )
-}
+// Note: The previous helper `isInGermany` was removed to allow global location selection.
+// Keep `GERMANY_BOUNDS` available for any future validations or heuristics.
 
 /**
  * Search for stops/stations near a location
