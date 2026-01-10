@@ -43,15 +43,15 @@ The scope of Phase 6 is focused on mobile UX polish, route editing, and performa
 
 ## 🟡 Medium Priority
 
-### 2. Route Editing
-**Status:** Placeholder in redesign spec
-**Description:** Allow users to modify routes by dragging waypoints.
+### 2. Route Editing (Phase 2)
+**Status:** MVP Complete, Phase 2 planned
+**Description:** Advanced route editing features.
 
-**Features:**
-- [ ] Draggable waypoints on route
-- [ ] Add/remove via points
-- [ ] Route recalculation
-- [ ] Distance/elevation update after edit
+**Phase 2 Features:**
+- [ ] Draggable waypoints on route (removed from MVP for simplicity)
+- [ ] Waypoint snapping to roads/paths
+- [ ] Undo/redo for edits
+- [ ] Keyboard accessibility for markers
 
 ---
 
@@ -68,14 +68,41 @@ The scope of Phase 6 is focused on mobile UX polish, route editing, and performa
 ---
 
 ## 📦 Phase 7 — MapLibre Followups (planned)
-Phase 7 continues the MapLibre redesign with accessibility, performance, and polishing tasks. See `docs/FEATURE_MAPLIBRE_REDESIGN.md` for the full spec and mockups.
+Phase 7 continues the MapLibre redesign with accessibility, performance, and polishing tasks. The design has been implemented — see `docs/finished/FEATURE_MAPLIBRE_REDESIGN.md` for the archived spec and implementation notes.
 
 - [ ] Accessibility audit & keyboard navigation for full-page map and bottom sheet
 - [ ] Performance profiling: lazy-load non-critical layers, debounce expensive updates
-- [ ] Visual polish: route dash animation, glow tuning, and 3D building toggles
+- [ ] Reintroduce route animation behind a user setting (accessibility opt-in) — consider: subtle flowing lines, feature flag, and reduced-motion preference
+- [x] Visual polish: route dash animation, glow tuning, and 3D building toggles (done: animated direction indicator on selected route)
 - [ ] Route editor improvements: waypoint snapping and undo/redo
-- [ ] Add visual regression checks for map / elevation rendering
-- [ ] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
+- [x] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)
+
+### Route Editor ✅ (MVP Complete)
+The Route Editor design has been implemented — see the archived spec and notes in `docs/finished/FEATURE_ROUTE_EDITOR.md`. 
+
+(Keep the original `docs/FEATURE_ROUTE_EDITOR.md` for historical reference.)
+
+**Completed MVP:**
+- [x] Click-to-add waypoints (insert at nearest route segment)
+- [x] Manual "Update Route" button with pulse animation on changes
+- [x] Tentative routing & metrics update (distance, duration, calories)
+- [x] Elevation profile refresh after route update (fixed: uses route hash for dependency)
+- [x] Waypoint markers on elevation profile (vertical dashed lines with labels)
+- [x] Distance from previous point shown in waypoint list
+- [x] Directional animation on selected route (station → home direction indicator)
+- [x] Save/Cancel buttons integrated into panel footer
+- [x] Side-panel waypoint removal with numbered labels
+- [x] Enforce max waypoints = 6 with inline messaging
+- [x] Edit mode indicator on map
+- [x] Integrated edit mode into RouteDetailPanel with conditional UI
+
+**Deferred (Phase 2):**
+- [ ] Draggable waypoint markers (removed for simplicity)
+- [ ] Map drag-to-create waypoint
+- [ ] Waypoint snapping and undo/redo
+- [ ] Accessibility: keyboard interactions for markers and editor controls
+- [ ] Add E2E interaction tests (click-add, remove)
+- [ ] Performance improvements & limit checks (debounce, caching, TTL for elevation cache)
 
 **Follow-ups:**
 - [ ] Convert any remaining visual regressions into fast smoke tests where appropriate

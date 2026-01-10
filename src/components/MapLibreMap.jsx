@@ -15,6 +15,8 @@ function MapLibreMap({
   routes = [], // Array of { stop, route, color, editMode, editableWaypoints }
   selectedRouteIndex = null,
   hoveredPoint = null,
+  highlightedWaypointIndex = null, // Index of waypoint to highlight
+  mapRevision = 0, // Revision counter to force re-render when waypoints change
   onRouteClick,
   onClick,
   className = 'h-64 w-full',
@@ -22,10 +24,8 @@ function MapLibreMap({
   // Transit overlay: GeoJSON feature (LineString) to show transit journey
   transitOverlay = null,
   transitColor = '#3b82f6',
-  // Route editor callbacks
+  // Route editor callback
   onAddWaypoint,
-  onWaypointMove,
-  onWaypointClick,
 }) {
   const mapContainer = useRef(null)
   const map = useRef(null)
@@ -35,6 +35,21 @@ function MapLibreMap({
   const [mapLoaded, setMapLoaded] = useState(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
   const currentDarkModeRef = useRef(darkMode)
+
+  // Use refs to avoid stale closures in event handlers
+  // Update refs synchronously during render (before effects run) to ensure click handlers always have fresh values
+  const routesRef = useRef(routes)
+  routesRef.current = routes
+  const selectedRouteIndexRef = useRef(selectedRouteIndex)
+  selectedRouteIndexRef.current = selectedRouteIndex
+  const onAddWaypointRef = useRef(onAddWaypoint)
+  onAddWaypointRef.current = onAddWaypoint
+  const onClickRef = useRef(onClick)
+  onClickRef.current = onClick
+
+  // Compute dependency values outside useEffect so they can be used in dependency array
+  const waypointSum = routes?.reduce((sum, r) => sum + (r?.editableWaypoints?.length || 0), 0) || 0
+  const routeDistances = routes?.map(r => r?.route?.distance || 0).join(',') || ''
 
   // Initialize map
   useEffect(() => {
@@ -55,6 +70,8 @@ function MapLibreMap({
 
       map.current.on('load', () => {
         console.log('[MapLibreMap] Map loaded successfully')
+        // Expose map instance for E2E tests/debugging
+        try { window.__runhome_map = map.current } catch (e) { /* ignore non-browser env */ }
         setMapLoaded(true)
         setStyleLoaded(true)
       })
@@ -79,14 +96,20 @@ function MapLibreMap({
         }, 100)
       })
 
-      // Handle map clicks
+      // Handle map clicks - use refs to avoid stale closures
       map.current.on('click', (e) => {
-        // If editMode is enabled, let parent handle adding a waypoint
-        if (onAddWaypoint) {
-          onAddWaypoint({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-          return
+        try {
+          const sel = selectedRouteIndexRef.current
+          const currentRoutes = routesRef.current
+          const editing = sel != null && currentRoutes?.[sel]?.editMode
+          if (editing && onAddWaypointRef.current) {
+            onAddWaypointRef.current({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+            return
+          }
+        } catch (err) {
+          // Fallback: if anything goes wrong, fall back to regular click handler
         }
-        onClick?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+        onClickRef.current?.({ lat: e.lngLat.lat, lng: e.lngLat.lng })
       })
     } catch (err) {
       console.error('Failed to initialize map:', err)
@@ -157,12 +180,9 @@ function MapLibreMap({
     markersRef.current.push(homeMarker)
   }, [marker, mapLoaded, styleLoaded])
 
-  // Add/update route layers and markers
+  // Add/update route layers and markers, with animated direction indicator
   useEffect(() => {
-    if (!map.current || !mapLoaded || !styleLoaded) {
-      console.log('[MapLibreMap] Routes effect skipped - mapLoaded:', mapLoaded, 'styleLoaded:', styleLoaded)
-      return
-    }
+    if (!map.current || !mapLoaded || !styleLoaded) return
 
     // Handle editable waypoints: remove previous waypoint markers
     markersRef.current
@@ -172,13 +192,8 @@ function MapLibreMap({
 
     if (!routes || routes.length === 0) return
 
-    // Check if map is still valid (safer than checking WebGL directly)
-    if (!map.current.loaded() || !map.current.isStyleLoaded()) {
-      console.log('[MapLibreMap] Routes effect skipped - map or style not ready')
-      return
-    }
-
-    console.log('[MapLibreMap] Routes effect running - adding', routes.length, 'routes')
+    // Check if map is still valid
+    if (!map.current.loaded() || !map.current.isStyleLoaded()) return
 
     // Remove previous event handlers
     routeHandlersRef.current.forEach(({ layerId, type, handler }) => {
@@ -199,6 +214,9 @@ function MapLibreMap({
         }
         if (map.current.getLayer(`${sourceId}-line-glow`)) {
           map.current.removeLayer(`${sourceId}-line-glow`)
+        }
+        if (map.current.getLayer(`${sourceId}-line-anim`)) {
+          map.current.removeLayer(`${sourceId}-line-anim`)
         }
         if (map.current.getSource(sourceId)) {
           map.current.removeSource(sourceId)
@@ -223,36 +241,41 @@ function MapLibreMap({
       // Render editable waypoints for the selected route if provided
       if (item.editableWaypoints && item.editableWaypoints.length > 0) {
         item.editableWaypoints.forEach((wp, widx) => {
+          const isHighlighted = (selectedRouteIndex === index && highlightedWaypointIndex === widx)
+          const waypointLabel = widx + 1
           const el = document.createElement('div')
           el.innerHTML = `
             <div style="
-              width: 14px;
-              height: 14px;
-              background: #f59e0b;
+              position: relative;
+              width: ${isHighlighted ? '28px' : '24px'};
+              height: ${isHighlighted ? '28px' : '24px'};
+              background: ${isHighlighted ? '#ef4444' : '#f59e0b'};
               border-radius: 50%;
-              border: 2px solid white;
-              box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+              border: ${isHighlighted ? '3px' : '2px'} solid white;
+              box-shadow: 0 ${isHighlighted ? '2' : '1'}px ${isHighlighted ? '8' : '4'}px rgba(0,0,0,${isHighlighted ? '0.5' : '0.3'});
               cursor: pointer;
-            "></div>
+              transition: all 0.2s ease;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            ">
+              <span style="
+                color: white;
+                font-size: ${isHighlighted ? '14px' : '12px'};
+                font-weight: bold;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+                line-height: 1;
+              ">${waypointLabel}</span>
+            </div>
           `
 
-          const wpMarker = new maplibregl.Marker({ element: el, anchor: 'center', draggable: item.editMode })
+          const wpMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
             .setLngLat([wp.lng, wp.lat])
             .addTo(map.current)
 
           wpMarker._type = 'waypoint'
           wpMarker._routeIndex = index
           wpMarker._wpIndex = widx
-
-          wpMarker.on('dragend', () => {
-            const lngLat = wpMarker.getLngLat()
-            onWaypointMove?.(index, widx, { lat: lngLat.lat, lng: lngLat.lng })
-          })
-
-          wpMarker.getElement().addEventListener('click', () => {
-            onWaypointClick?.(index, widx)
-          })
-
           markersRef.current.push(wpMarker)
         })
       }
@@ -312,6 +335,8 @@ function MapLibreMap({
             'line-opacity-transition': { duration: 300, delay: 0 },
           },
         })
+
+
 
         // Add click handler for route and store for cleanup
         const clickHandler = () => {
@@ -393,7 +418,10 @@ function MapLibreMap({
         duration: 500,
       })
     }
-  }, [routes, selectedRouteIndex, mapLoaded, styleLoaded, marker, onRouteClick])
+
+
+
+  }, [routes, selectedRouteIndex, highlightedWaypointIndex, mapLoaded, styleLoaded, marker, onRouteClick, waypointSum, routeDistances, mapRevision])
 
   // Handle hovered point from elevation profile
   useEffect(() => {
@@ -518,12 +546,24 @@ function MapLibreMap({
   }, [marker, zoom, mapLoaded, routes.length])
 
   return (
-    <div
-      id="main-map"
-      ref={mapContainer}
-      className={className}
-      style={{ position: 'relative', width: '100%', height: '100%', minHeight: '200px' }}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '200px' }}>
+      <div
+        id="main-map"
+        ref={mapContainer}
+        className={className}
+        style={{ position: 'absolute', inset: 0 }}
+      />
+
+      {/* Edit mode indicator */}
+      {selectedRouteIndex != null && routes?.[selectedRouteIndex]?.editMode && (
+        <div className="absolute left-3 top-3 z-30">
+          <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-lg border border-slate-700/50">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-sm font-medium">Tap map to add waypoint</span>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

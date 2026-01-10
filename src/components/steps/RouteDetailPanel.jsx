@@ -1,11 +1,10 @@
-import { X, Download, Route, Clock, Flame, Flag } from 'lucide-react'
+import { X, Download, Route, Clock, Flame, Flag, Pencil, Check } from 'lucide-react'
 import ElevationProfile from '../ElevationProfile'
 import TransitJourneyDetails from './TransitJourneyDetails'
 import RouteEditor from '../RouteEditor'
-import { getStopIcon } from '../../services/deutschebahn'
-import { formatTime } from '../../services/deutschebahn'
+import { getStopIcon, formatTime } from '../../services/deutschebahn'
 
-// Helpers (copied from RouteResults for now)
+// Helpers
 function calculateCalories(distanceKm, elevationGain = 0, activity = 'run') {
   const baseCalPerKm = activity === 'run' ? 60 : 35
   const terrainFactor = 1 + (elevationGain / 100) * 0.1
@@ -22,10 +21,7 @@ function calculateDuration(distanceKm, paceMinPerKm) {
   const totalMinutes = distanceKm * paceMinPerKm
   const hours = Math.floor(totalMinutes / 60)
   const mins = Math.round(totalMinutes % 60)
-  if (hours > 0) {
-    return `${hours}h ${mins}m`
-  }
-  return `${mins} min`
+  return hours > 0 ? `${hours}h ${mins}m` : `${mins} min`
 }
 
 function StatBox({ icon, label, value }) {
@@ -40,7 +36,32 @@ function StatBox({ icon, label, value }) {
   )
 }
 
-export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownloadGPX, activity, pace, onPaceChange, showTransitOnMap = false, onToggleShowTransit, dbApiAvailable = false, editMode = false, waypoints = [], onToggleEdit, onAddWaypoint, onRemoveWaypoint, onSave, onCancel }) {
+export default function RouteDetailPanel({
+  item,
+  onClose,
+  onHoverPoint,
+  onDownloadGPX,
+  activity,
+  pace,
+  onPaceChange,
+  showTransitOnMap = false,
+  onToggleShowTransit,
+  dbApiAvailable = false,
+  homeLocation = null,
+  // Editor props
+  editMode = false,
+  waypoints = [],
+  selectedWaypointIndex = null,
+  waypointError = null,
+  routeNeedsUpdate = false,
+  tentativeRoute = null,
+  onToggleEdit,
+  onRemoveWaypoint,
+  onSelectWaypoint,
+  onUpdateRoute,
+  onSave,
+  onCancel,
+}) {
   if (!item || !item.route) {
     return (
       <div className="h-full flex items-center justify-center text-slate-400">
@@ -48,14 +69,14 @@ export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownlo
       </div>
     )
   }
+
   const distanceKm = item.route.distance / 1000
   const duration = calculateDuration(distanceKm, pace)
   const calories = calculateCalories(distanceKm, 0, activity)
-
   const departureTime = item.transitJourney?.legs?.[0]?.origin?.departure
-  let eta = null
-  const runDurationMs = distanceKm * pace * 60 * 1000 // ms
+  const runDurationMs = distanceKm * pace * 60 * 1000
 
+  let eta = null
   if (departureTime) {
     const depDate = new Date(departureTime)
     const transitDuration = item.transitJourney?.duration || 0
@@ -69,29 +90,35 @@ export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownlo
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-700/50">
         <button
-          onClick={onClose}
+          onClick={editMode ? onCancel : onClose}
           className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors"
-          aria-label="Close route details"
+          aria-label={editMode ? 'Cancel editing' : 'Close route details'}
         >
           <X className="w-5 h-5" />
         </button>
-        <h2 className="font-semibold text-white">Route Details</h2>
+        <h2 className="font-semibold text-white">
+          {editMode ? 'Edit Route' : 'Route Details'}
+        </h2>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => dbApiAvailable ? onToggleShowTransit?.() : undefined}
-            className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${showTransitOnMap ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700/50'} ${!dbApiAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
-            aria-pressed={showTransitOnMap}
-            aria-disabled={!dbApiAvailable}
-            title={!dbApiAvailable ? 'Transit API unavailable' : (showTransitOnMap ? 'Hide transit on map' : 'Show transit')}
-            aria-label={showTransitOnMap ? 'Hide transit on map' : 'Show transit'}
-            disabled={!dbApiAvailable}
-          >
-            {showTransitOnMap ? 'Transit on map' : (dbApiAvailable ? 'Show transit' : 'Transit unavailable')}
-          </button>
+          {!editMode && dbApiAvailable && (
+            <button
+              onClick={onToggleShowTransit}
+              className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${
+                showTransitOnMap
+                  ? 'bg-slate-700 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700/50'
+              }`}
+              aria-pressed={showTransitOnMap}
+            >
+              {showTransitOnMap ? 'Transit on map' : 'Show transit'}
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Stop info */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xl">{getStopIcon(item.stop.type)}</span>
@@ -99,11 +126,13 @@ export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownlo
           </div>
           {!item.noTransitInfo && item.transitJourney?.legs && (
             <p className="text-sm text-slate-400">
-              {item.transitJourney.legs.filter(l => l.line).map(l => l.line.name).join(' → ')} • {departureTime && `Depart ${formatTime(departureTime)}`}
+              {item.transitJourney.legs.filter(l => l.line).map(l => l.line.name).join(' → ')}
+              {departureTime && ` • Depart ${formatTime(departureTime)}`}
             </p>
           )}
         </div>
 
+        {/* Pace control */}
         <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-300">⚙️ Your Pace</span>
@@ -111,62 +140,133 @@ export default function RouteDetailPanel({ item, onClose, onHoverPoint, onDownlo
               <button
                 onClick={() => onPaceChange(Math.max(2, pace - 0.5))}
                 className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
-                aria-label="Decrease pace"
-              >
-                -
-              </button>
+              >-</button>
               <span className="text-white font-mono text-sm w-12 text-center">{formatPace(pace)}</span>
               <button
                 onClick={() => onPaceChange(Math.min(10, pace + 0.5))}
                 className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
-                aria-label="Increase pace"
-              >
-                +
-              </button>
+              >+</button>
               <span className="text-xs text-slate-500">min/km</span>
             </div>
           </div>
         </div>
 
+        {/* Stats grid */}
         <div className="grid grid-cols-2 gap-2">
           <StatBox icon={<Route className="w-4 h-4" />} label="Distance" value={`${distanceKm.toFixed(1)} km`} />
           <StatBox icon={<Clock className="w-4 h-4" />} label="Duration" value={duration} />
           <StatBox icon={<Flame className="w-4 h-4" />} label="Calories" value={`~${calories} kcal`} />
-          <StatBox icon={<Flag className="w-4 h-4" />} label="ETA" value={eta ? eta.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '--:--'} />
+          <StatBox icon={<Flag className="w-4 h-4" />} label="ETA" value={eta?.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) || '--:--'} />
         </div>
 
+        {/* Elevation profile */}
         <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
           <h4 className="text-sm font-medium text-slate-300 mb-2">📈 Elevation Profile</h4>
-          <ElevationProfile key={`elevation-${item.stop.id}`} route={item.route} color={item.color} onHoverPoint={onHoverPoint} height={180} />
+          {routeNeedsUpdate ? (
+            <div className="flex items-center justify-center text-slate-400 text-sm h-[180px]">
+              Update the route to see the elevation profile
+            </div>
+          ) : (
+            <ElevationProfile
+              key={`elevation-${item.stop.id}-${(editMode && tentativeRoute ? tentativeRoute.distance : item.route?.distance) || 0}-${(editMode && tentativeRoute ? tentativeRoute.geometry?.coordinates?.length : item.route?.geometry?.coordinates?.length) || 0}`}
+              route={editMode && tentativeRoute ? tentativeRoute : item.route}
+              color={item.color}
+              onHoverPoint={onHoverPoint}
+              height={180}
+              waypoints={editMode ? waypoints : []}
+            />
+          )}
         </div>
 
-        {!item.noTransitInfo && item.transitJourney && (
+        {/* Transit details (only in view mode) */}
+        {!editMode && !item.noTransitInfo && item.transitJourney && (
           <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
             <h4 className="text-sm font-medium text-slate-300 mb-2">🚇 Getting There</h4>
             <TransitJourneyDetails journey={item.transitJourney} />
           </div>
         )}
 
-        {/* Route editor UI */}
-        <RouteEditor
-          editMode={editMode}
-          waypoints={waypoints}
-          onToggleEdit={onToggleEdit}
-          onAddWaypoint={onAddWaypoint}
-          onRemoveWaypoint={onRemoveWaypoint}
-          onSave={onSave}
-          onCancel={onCancel}
-        />
+        {/* Edit mode: Waypoint editor */}
+        {editMode && (() => {
+          // Calculate distances from previous point for each waypoint
+          function haversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000 // meters
+            const dLat = (lat2 - lat1) * Math.PI / 180
+            const dLon = (lon2 - lon1) * Math.PI / 180
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            return R * c
+          }
+          const startPoint = item?.stop ? { lat: item.stop.lat, lng: item.stop.lng, name: item.stop.name } : null
+          let prev = startPoint
+          const waypointDistances = waypoints.map(wp => {
+            if (!prev) return 0
+            const dist = haversineDistance(prev.lat, prev.lng, wp.lat, wp.lng)
+            prev = wp
+            return dist
+          })
+          return (
+            <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+              <h4 className="text-sm font-medium text-slate-300 mb-3">📍 Waypoints</h4>
+              <RouteEditor
+                editMode={editMode}
+                waypoints={waypoints}
+                waypointDistances={waypointDistances}
+                startPoint={startPoint}
+                endPoint={homeLocation ? { lat: homeLocation.lat, lng: homeLocation.lng, name: 'Home' } : null}
+                selectedWaypointIndex={selectedWaypointIndex}
+                waypointError={waypointError}
+                routeNeedsUpdate={routeNeedsUpdate}
+                onRemoveWaypoint={onRemoveWaypoint}
+                onSelectWaypoint={onSelectWaypoint}
+                onUpdateRoute={onUpdateRoute}
+              />
+            </div>
+          )
+        })()}
       </div>
 
+      {/* Footer - changes based on edit mode */}
       <div className="p-4 border-t border-slate-700/50 space-y-2">
-        <button
-          onClick={(e) => onDownloadGPX(e, item)}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg shadow-green-500/20"
-        >
-          <Download className="w-5 h-5" />
-          Download GPX
-        </button>
+        {editMode ? (
+          /* Edit mode: Save and Cancel buttons */
+          <div className="flex gap-2">
+            <button
+              onClick={onSave}
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg shadow-green-500/20"
+            >
+              <Check className="w-5 h-5" />
+              Save Changes
+            </button>
+            <button
+              onClick={onCancel}
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-700 text-white font-medium hover:bg-slate-600 transition-colors"
+            >
+              <X className="w-5 h-5" />
+              Discard
+            </button>
+          </div>
+        ) : (
+          /* View mode: Download and Edit buttons */
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => onDownloadGPX(e, item)}
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg shadow-green-500/20"
+            >
+              <Download className="w-5 h-5" />
+              Download GPX
+            </button>
+            <button
+              onClick={onToggleEdit}
+              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-700 text-white font-medium hover:bg-slate-600 transition-colors"
+            >
+              <Pencil className="w-5 h-5" />
+              Edit
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

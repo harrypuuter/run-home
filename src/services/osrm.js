@@ -45,6 +45,37 @@ export async function calculateRoute({ startLat, startLng, endLat, endLng, profi
 }
 
 /**
+ * Calculate a route passing through multiple waypoints (start -> ...waypoints -> end)
+ * @param {Object} options
+ * @param {Array} options.coords - Array of { lat, lng } representing full ordered coordinates
+ * @param {string} options.profile - Routing profile ('foot' or 'bike')
+ * @returns {Promise<Object>} - Route data
+ */
+export async function calculateRouteWithWaypoints({ coords = [], profile = 'foot' }) {
+  if (!coords || coords.length < 2) throw new Error('Need at least start and end coordinates')
+
+  // OSRM expects lng,lat pairs separated by semicolons
+  const coordinates = coords.map(c => `${c.lng},${c.lat}`).join(';')
+  const baseUrl = OSRM_SERVERS[profile] || OSRM_SERVERS.foot
+  const url = `${baseUrl}/${coordinates}?overview=full&geometries=geojson`
+
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`OSRM routing failed: ${response.status}`)
+
+  const data = await response.json()
+  if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+    throw new Error('No route found')
+  }
+
+  const route = data.routes[0]
+  return {
+    distance: route.distance,
+    duration: route.duration,
+    geometry: route.geometry,
+  }
+}
+
+/**
  * Calculate routes for multiple stops
  * @param {Array} stops - Array of transit stops
  * @param {Object} home - Home location { lat, lng }
