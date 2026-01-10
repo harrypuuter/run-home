@@ -64,11 +64,11 @@ const RouteCardMini = memo(function RouteCardMini({ item, index, isSelected, onS
     <button
       onClick={() => onSelect(index)}
       className={`
-        w-full text-left p-3 rounded-xl transition-all duration-200
+        w-full text-left p-3 rounded-xl transition-all duration-200 transform-gpu
         backdrop-blur-md border shadow-lg
         ${isSelected
-          ? 'bg-slate-800/95 border-blue-500 ring-2 ring-blue-500/30'
-          : 'bg-slate-800/80 border-slate-600/50 hover:bg-slate-800/90 hover:border-slate-500'
+          ? 'bg-slate-800/95 border-blue-500 ring-2 ring-blue-500/30 scale-105 shadow-xl'
+          : 'bg-slate-800/80 border-slate-600/50 hover:bg-slate-800/90 hover:border-slate-500 hover:scale-102'
         }
       `}
     >

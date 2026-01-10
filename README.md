@@ -1,5 +1,10 @@
 # Run Home 🏃‍♂️🏠 🇩🇪
 
+[![E2E Tests](https://github.com/harrypuuter/run-home/actions/workflows/e2e.yml/badge.svg)](https://github.com/harrypuuter/run-home/actions/workflows/e2e.yml)
+
+> CI runs Playwright E2E tests on PRs and pushes — enable the workflow as a required status check in repository settings to block merging on failures.
+
+
 A web application that helps runners and cyclists in **Germany** plan their journey home from public transit stops using Deutsche Bahn data.
 
 ## Features
