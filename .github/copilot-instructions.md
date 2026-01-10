@@ -53,6 +53,7 @@ CI & logs (how to access)
 
 Notes:
 - Downloading logs or artifacts via the API may require repository admin access (you may see "Must have admin rights to Repository" if not permitted). If you hit this, use the web UI or ask an admin to download logs.
+- The Playwright reporter and `playwright-report/` artifact (if uploaded) contain HTML test reports, screenshots, and error-context files (see `test-results/` folder in the repo when run locally). When a test fails in CI, look for the `playwright-report` artifact or the `test-results/*/error-context.md` file inside the runner workspace.
 - If tests fail due to viewport/layout (mobile vs desktop), make E2E tests explicitly set `page.setViewportSize(...)` or use a mobile device preset to avoid environment-dependent flakiness.
 - When reproducing CI failures locally, match the Node/npm versions used in CI (workflow uses Node 20) and run `npx playwright install --with-deps` before running tests to ensure browsers are available.
 
