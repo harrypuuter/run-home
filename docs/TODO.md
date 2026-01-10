@@ -72,6 +72,7 @@ Phase 7 continues the MapLibre redesign with accessibility, performance, and pol
 
 - [ ] Accessibility audit & keyboard navigation for full-page map and bottom sheet
 - [ ] Performance profiling: lazy-load non-critical layers, debounce expensive updates
+- [ ] Reintroduce route animation behind a user setting (accessibility opt-in) — consider: subtle flowing lines, feature flag, and reduced-motion preference
 - [x] Visual polish: route dash animation, glow tuning, and 3D building toggles (done: animated direction indicator on selected route)
 - [ ] Route editor improvements: waypoint snapping and undo/redo
 - [x] Add deterministic E2E test fixtures for core services (Overpass/OSRM/Open‑Meteo) to avoid CI flakes (done: `tests/e2e/fixtures/api-mocks.js`)

@@ -20,7 +20,7 @@
 - **Edit mode indicator:** Subtle map overlay shows when editing is active
 
 #### Visual Enhancements
-- **Directional animation:** Animated dash pattern on selected route showing running direction (station → home)
+- **Directional animation:** *Removed (temporary).* The experimental animated direction indicator was reverted to restore a static route display. Consider reintroducing behind a feature flag or accessibility toggle (see `docs/TODO.md`).
 - **Waypoint markers in elevation profile:** Vertical dashed lines with numbered labels showing waypoint positions
 - **Distance from previous point:** Waypoint list shows distance from start/previous waypoint for context
 
