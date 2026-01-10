@@ -11,14 +11,26 @@
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/elevation'
 
 // In-memory cache for elevation points keyed by quantized lat,lng
+// Value shape: { v: number, ts: number, lastAccess: number }
 const elevationCache = new Map()
+
+// Cache limits and TTL
+const CACHE_MAX_ENTRIES = 10000
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 14 // 14 days
+
 // Load cache from localStorage if available to persist between reloads
 try {
   const raw = localStorage.getItem('elevationCache')
   if (raw) {
     const parsed = JSON.parse(raw)
     for (const k of Object.keys(parsed)) {
-      elevationCache.set(k, parsed[k])
+      const entry = parsed[k]
+      // Backwards compat: previous format stored numbers; convert to object
+      if (entry && typeof entry === 'object' && 'v' in entry) {
+        elevationCache.set(k, entry)
+      } else {
+        elevationCache.set(k, { v: entry, ts: Date.now(), lastAccess: Date.now() })
+      }
     }
   }
 } catch (err) {
@@ -37,6 +49,22 @@ function persistCache() {
 function cacheKey(lat, lng, precision = 4) {
   // Quantize to ~11m at equator when precision=4
   return `${lat.toFixed(precision)},${lng.toFixed(precision)}`
+}
+
+function evictIfNeeded() {
+  const now = Date.now()
+  // Remove TTL-expired entries first
+  for (const [k, entry] of elevationCache) {
+    if (entry && entry.ts && (now - entry.ts) > CACHE_TTL_MS) {
+      elevationCache.delete(k)
+    }
+  }
+
+  // If still over capacity, remove oldest entries (Map iteration order)
+  while (elevationCache.size > CACHE_MAX_ENTRIES) {
+    const oldestKey = elevationCache.keys().next().value
+    elevationCache.delete(oldestKey)
+  }
 }
 
 /**
@@ -117,8 +145,15 @@ export async function fetchElevationProfile(coordinates) {
     for (let i = 0; i < sampled.length; i++) {
       const p = sampled[i]
       const key = cacheKey(p.lat, p.lng)
+
       if (elevationCache.has(key)) {
-        finalProfile[i].elevation = elevationCache.get(key)
+        // Update LRU timestamp and move to the end
+        const cached = elevationCache.get(key)
+        cached.lastAccess = Date.now()
+        // Re-insert to update insertion order (simple LRU behavior)
+        elevationCache.delete(key)
+        elevationCache.set(key, cached)
+        finalProfile[i].elevation = typeof cached.v === 'number' ? cached.v : null
       } else {
         missingIndices.push(i)
       }
@@ -147,9 +182,13 @@ export async function fetchElevationProfile(coordinates) {
         finalProfile[idx].elevation = typeof elevation === 'number' && !isNaN(elevation) ? elevation : null
         const key = cacheKey(sampled[idx].lat, sampled[idx].lng)
         if (finalProfile[idx].elevation !== null) {
-          elevationCache.set(key, finalProfile[idx].elevation)
+          // Store with metadata
+          elevationCache.set(key, { v: finalProfile[idx].elevation, ts: Date.now(), lastAccess: Date.now() })
         }
       }
+
+      // Evict old entries and enforce max size
+      evictIfNeeded()
 
       // Persist cache periodically
       persistCache()
@@ -157,6 +196,9 @@ export async function fetchElevationProfile(coordinates) {
 
     const validCount = finalProfile.filter(p => p.elevation !== null).length
     console.log('[Elevation] Got', finalProfile.length, 'points,', validCount, 'with valid elevation')
+
+    // Run eviction once more to keep cache tidy after processing
+    evictIfNeeded()
 
     // Apply smoothing to reduce spikes. Use a two-pass approach and a larger minimum window
     const totalDistance = finalProfile.length > 0 ? finalProfile[finalProfile.length - 1].distance : 0
@@ -333,3 +375,27 @@ export function calculateElevationStats(profile) {
     min: Math.round(min),
   }
 }
+
+// --- Test helpers (not for production use) ---
+export function _clearElevationCache() {
+  elevationCache.clear()
+  persistCache()
+}
+
+export function _setCacheEntryForTest(key, value, ts = Date.now()) {
+  elevationCache.set(key, { v: value, ts, lastAccess: ts })
+}
+
+export function _setCacheEntryWithTs(key, value, ts) {
+  elevationCache.set(key, { v: value, ts, lastAccess: ts })
+}
+
+export function _evictOldEntries() {
+  evictIfNeeded()
+}
+
+export function _cacheSize() {
+  return elevationCache.size
+}
+
+export { cacheKey }
